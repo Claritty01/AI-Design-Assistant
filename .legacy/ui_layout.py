@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QScrollArea, QToolButton, QSplitter, QSizePolicy
 )
 from PyQt5.QtWidgets import QComboBox
-from model_manager import get_current_model, set_current_model, list_models
+from ai_design_assistant.core.models import get_current_model, set_current_model, list_models
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer, QEvent
 from PyQt5.QtGui import QFont, QPixmap, QIcon
 import os
@@ -24,11 +24,11 @@ import shutil
 from pathlib import Path
 
 from ai_design_assistant.core.logger import get_logger
-from model_manager import stream_chat_response
+from ai_design_assistant.core.models import stream_chat_response
 from ai_design_assistant.core.settings import load_settings, save_settings
-from chat_history import load_history, save_history, append_message, set_current_chat
-from chat_manager import load_chats, create_new_chat
-from plugin_manager import get_plugins
+from ai_design_assistant.core.chat import ChatSession
+from ai_design_assistant.core.chat import load_chats, create_new_chat
+from ai_design_assistant.core.plugins import get_plugins
 
 from settings_dialog import SettingsDialog   # <— новый импорт
 from ai_design_assistant.core.settings import AppSettings             # <— нужен для apply_theme

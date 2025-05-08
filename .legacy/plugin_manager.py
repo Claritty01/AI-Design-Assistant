@@ -14,7 +14,7 @@ project_root/
 └── ...
 
 Usage in ui_layout.py:
-    from plugin_manager import get_plugins
+    from ai_design_assistant.core.plugins import get_plugins
     plugins = get_plugins()
     for p in plugins.values():
         button = QPushButton(p.display_name)

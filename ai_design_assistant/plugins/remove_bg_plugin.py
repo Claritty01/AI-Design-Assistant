@@ -1,7 +1,7 @@
 # plugins/remove_bg_plugin.py
 from pathlib import Path
 import subprocess, io
-from plugin_manager import BaseImagePlugin
+from ai_design_assistant.core.plugins import BaseImagePlugin
 from logger import get_logger
 
 log = get_logger("rembg")
