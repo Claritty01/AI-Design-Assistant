@@ -1,191 +1,225 @@
-"""Primary Qt window for AI Design Assistant.
-
-The goal is to keep *all* Qt‑specific code in the ``ui`` package. This module
-hosts the main frame, assembles child widgets (chat list, input line, plugin
-panel), wires menus and forwards user input to the **core** layer.
-"""
+# ai_design_assistant/ui/main_window.py
 from __future__ import annotations
 
-import logging
+import sys
 from pathlib import Path
-from typing import Final
+from typing import List, Optional
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent
+from PyQt6.QtGui import QAction, QIcon, QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
-    QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QSplitter,
-    QToolBar,
+    QStyle,
+    QTabWidget,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from ai_design_assistant.core import ChatSession, Message, Settings, get_global_router
-from ai_design_assistant.ui.workers import StreamWorker
-from ai_design_assistant.ui.plugin_panel import PluginPanel
+# ────────────────────────────────────────────────
+#  internal imports ― пути поправлены
+# ────────────────────────────────────────────────
+from ai_design_assistant.core.chat import ChatSession, Message           # ⬅️ renamed
+from ai_design_assistant.core.models import LLMRouter                    # ⬅️ moved
+from ai_design_assistant.ui.chat_view import ChatView
+from ai_design_assistant.ui.workers import GenerateThread
+
+ASSETS = Path(__file__).with_suffix("").parent.parent / "assets" / "icons"
 
 
-_LOGGER = logging.getLogger(__name__)
-_RES_DIR: Final = Path(__file__).with_suffix("").parent / "resources"
+# ╭──────────────────────────────────────────────╮
+# │                   Helpers                    │
+# ╰──────────────────────────────────────────────╯
+class EnterTextEdit(QTextEdit):
+    """QTextEdit → emit sendRequested on bare Enter (Shift + Enter → newline)."""
+    sendRequested = pyqtSignal()
+
+    def keyPressEvent(self, ev: QKeyEvent) -> None:
+        if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
+            ev.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        ):
+            self.sendRequested.emit()
+            return                          # откусываем перевод строки
+        super().keyPressEvent(ev)
 
 
-# ---------------------------------------------------------------------------
-# Background worker (simple streaming wrapper)
-# ---------------------------------------------------------------------------
+class InputBar(QWidget):
+    sendClicked = pyqtSignal(str)
+    imageAttached = pyqtSignal(Path)
 
-
-class StreamWorker(QThread):
-    token_received = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-    def __init__(self, messages: list[Message]):
-        super().__init__()
-        self._messages = messages
-        self._router = get_global_router()
-
-    def run(self) -> None:  # noqa: D401
-        try:
-            for token in self._router.stream(self._messages):
-                self.token_received.emit(token)
-        except Exception as exc:  # pragma: no cover
-            _LOGGER.exception("Streaming failed")
-            self.error.emit(str(exc))
-
-
-# ---------------------------------------------------------------------------
-# Main Window
-# ---------------------------------------------------------------------------
-
-
-class MainWindow(QMainWindow):
-    """Top‑level application window."""
-
-    def __init__(self) -> None:  # noqa: D401
-        super().__init__()
-        self.setWindowTitle("AI Design Assistant")
-        self.resize(1024, 720)
-
-        # state
-        self.settings = Settings.load()
-        self.chat = ChatSession(title="Session")
-        # ui helpers
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
         self._build_ui()
-        self._connect_signals()
 
-    # ------------------------------------------------------------------
-    # UI construction helpers
-    # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        central = QWidget(self)
-        self.setCentralWidget(central)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setSpacing(6)
 
-        # Splitter: left (chat list) | right (plugins) — placeholders
-        self.splitter = QSplitter(Qt.Orientation.Horizontal, central)
+        self.text_edit = EnterTextEdit(self)
+        self.text_edit.setPlaceholderText("Write a message…")
+        self.text_edit.setFixedHeight(70)
+        self.text_edit.sendRequested.connect(self._emit_send)
 
-        # Left pane: chat history + input
-        left_pane = QWidget()
-        left_layout = QVBoxLayout(left_pane)
-        left_layout.setContentsMargins(4, 4, 4, 4)
+        attach_btn = QPushButton(self)
+        attach_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon))
+        attach_btn.setToolTip("Attach image")
+        attach_btn.clicked.connect(self._attach_image)
 
+        send_btn = QPushButton(self)
+        send_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowForward))
+        send_btn.setToolTip("Send")
+        send_btn.clicked.connect(self._emit_send)
+
+        lay.addWidget(attach_btn)
+        lay.addWidget(self.text_edit, 1)
+        lay.addWidget(send_btn)
+
+    # ――― slots ――― #
+    def _emit_send(self) -> None:
+        text = self.text_edit.toPlainText().strip()
+        if text:
+            self.text_edit.clear()
+            self.sendClicked.emit(text)
+
+    def _attach_image(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose image",
+            str(Path.home()),
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
+        )
+        if file_path:
+            self.imageAttached.emit(Path(file_path))
+
+
+# ╭──────────────────────────────────────────────╮
+# │                 MainWindow                   │
+# ╰──────────────────────────────────────────────╯
+class MainWindow(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("AI Design Assistant")
+        self.resize(1200, 780)
+
+        self.router = LLMRouter()
+        self.sessions: List[ChatSession] = []
+        self.current: Optional[ChatSession] = None
+
+        self._build_ui()
+        self._create_menu()
+        self._new_chat()                         # стартовая сессия
+
+    # ――― UI каркас ――― #
+    def _build_ui(self) -> None:
+        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        self.setCentralWidget(splitter)
+
+        # left sidebar
+        left = QWidget(self)
+        l_lay = QVBoxLayout(left)
+        new_btn = QPushButton("＋ New chat")
+        new_btn.clicked.connect(self._new_chat)
         self.chat_list = QListWidget()
-        self.input_line = QLineEdit()
-        self.send_button = QPushButton("Send")
+        self.chat_list.itemClicked.connect(self._switch_chat)
+        settings_btn = QPushButton("⚙ Settings")
+        settings_btn.clicked.connect(lambda: QMessageBox.information(self, "Settings", "todo"))
+        l_lay.addWidget(new_btn)
+        l_lay.addWidget(self.chat_list, 1)
+        l_lay.addWidget(settings_btn)
 
-        left_layout.addWidget(self.chat_list, 1)
-        input_box = QWidget()
-        h = QHBoxLayout(input_box)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.addWidget(self.input_line, 1)
-        h.addWidget(self.send_button)
-        left_layout.addWidget(input_box)
+        # center (chat)
+        center = QWidget(self)
+        c_lay = QVBoxLayout(center)
+        self.chat_view = ChatView(self)
+        self.input_bar = InputBar(self)
+        self.input_bar.sendClicked.connect(self._on_user_text)
+        self.input_bar.imageAttached.connect(self._on_attachment)
+        c_lay.addWidget(self.chat_view, 1)
+        c_lay.addWidget(self.input_bar)
 
-        # Right pane placeholder (plugins later)
-        right_pane = QWidget()
-        right_layout = QVBoxLayout(right_pane)
-        right_layout.addWidget(QWidget())  # tod: plugin panel
+        # right sidebar (plugins)
+        right = QTabWidget(self)
+        right.setMinimumWidth(260)
+        right.addTab(QLabel("Upscale (todo)"), "Upscale")
+        right.addTab(QLabel("Remove BG (todo)"), "Remove BG")
 
-        self.splitter.addWidget(left_pane)
-        self.splitter.addWidget(right_pane)
-        self.splitter.setStretchFactor(0, 3)
-        self.splitter.setStretchFactor(1, 1)
+        splitter.addWidget(left)
+        splitter.addWidget(center)
+        splitter.addWidget(right)
+        splitter.setSizes([220, 700, 280])
 
-        root_layout = QVBoxLayout(central)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.addWidget(self.splitter)
+    def _create_menu(self) -> None:
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(QApplication.instance().quit)
+        self.menuBar().addAction(quit_action)
 
-        # Toolbar (theme switch, model provider, etc.) — minimal now
-        tb = QToolBar("Main")
-        self.addToolBar(tb)
-        save_act = QAction(QIcon.fromTheme("document-save"), "Save chat", self)
-        save_act.triggered.connect(self._save_chat)
-        tb.addAction(save_act)
+    # ――― chat-session helpers ――― #
+    def _new_chat(self) -> None:
+        session = ChatSession()
+        self.sessions.append(session)
 
-    def _connect_signals(self) -> None:  # noqa: D401
-        self.send_button.clicked.connect(self._on_send_clicked)
-        self.input_line.returnPressed.connect(self._on_send_clicked)
+        item = QListWidgetItem("Chat " + session.uuid[:6])
+        item.setData(Qt.ItemDataRole.UserRole, session)
+        self.chat_list.addItem(item)
+        self.chat_list.setCurrentItem(item)
 
-    # ------------------------------------------------------------------
-    # Slots
-    # ------------------------------------------------------------------
-    def _on_send_clicked(self) -> None:
-        text = self.input_line.text().strip()
-        if not text:
+        self._activate_session(session)
+
+    def _switch_chat(self, item: QListWidgetItem) -> None:
+        session = item.data(Qt.ItemDataRole.UserRole)
+        self._activate_session(session)
+
+    def _activate_session(self, session: ChatSession) -> None:
+        self.current = session
+        self.chat_view.clear()
+        for m in session.messages:
+            self.chat_view.add_message(m.content, is_user=(m.role == "user"))
+
+    # ――― sending / receiving ――― #
+    def _on_user_text(self, text: str) -> None:
+        if not self.current:
             return
-        self.input_line.clear()
+        msg = Message(role="user", content=text)
+        self.current.messages.append(msg)
+        self.chat_view.add_message(text, is_user=True)
 
-        # add user msg
-        user_msg = self.chat.add_message("user", text)
-        QListWidgetItem(f"🧑 {text}", self.chat_list)
+        worker = GenerateThread(self.router, list(self.current.messages))
+        worker.finished.connect(self._on_llm_reply)
+        worker.error.connect(self._on_llm_error)
+        worker.start()
 
-        # start stream worker
-        self.worker = StreamWorker(self.chat.messages)
-        self.worker.token_received.connect(self._on_token)
-        self.worker.error.connect(self._on_error)
-        self.worker.finished.connect(self._on_stream_finished)
-        self.worker.start()
+    def _on_attachment(self, path: Path) -> None:
+        self._on_user_text(f"[Image] {path.name}")
 
-    def _on_token(self, token: str) -> None:  # noqa: D401
-        # if last item is assistant line, append; else create
-        if self.chat_list.count() and self.chat_list.item(self.chat_list.count() - 1).text().startswith("🤖"):
-            item = self.chat_list.item(self.chat_list.count() - 1)
-            item.setText(item.text() + token)
-        else:
-            QListWidgetItem(f"🤖 {token}", self.chat_list)
-        self.chat_list.scrollToBottom()
+    def _on_llm_reply(self, reply: str) -> None:
+        if not self.current:
+            return
+        self.current.messages.append(Message(role="assistant", content=reply))
+        self.chat_view.add_message(reply, is_user=False)
 
-    def _on_stream_finished(self) -> None:  # noqa: D401
-        # save assistant message fully
-        if self.chat_list.count():
-            last = self.chat_list.item(self.chat_list.count() - 1).text()
-            # strip emoji & space
-            content = last[2:].lstrip()
-            self.chat.add_message("assistant", content)
-        _LOGGER.debug("Assistant message saved (%d total)", len(self.chat.messages))
-
-    def _on_error(self, msg: str) -> None:  # noqa: D401
-        QListWidgetItem(f"⚠️  Error: {msg}", self.chat_list)
-
-    # ------------------------------------------------------------------
-    # Menu / toolbar callbacks
-    # ------------------------------------------------------------------
-    def _save_chat(self) -> None:
-        path = self.chat.save()
-        _LOGGER.info("Chat saved to %s", path)
+    def _on_llm_error(self, err: str) -> None:
+        QMessageBox.critical(self, "LLM error", err)
 
 
-# ---------------------------------------------------------------------------
-# Entry‑point for `python -m ai_design_assistant.ui.main_window` (dev‑only)
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":  # pragma: no cover
-    import sys
 
+
+# ────────────────────────────────────────────────
+def main() -> None:
     app = QApplication(sys.argv)
-    w = MainWindow()
-    w.show()
+    win = MainWindow()
+    win.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

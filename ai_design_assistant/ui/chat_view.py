@@ -37,6 +37,8 @@ class ChatView(QWidget):
     # ------------------------------------------------------------------
     # High-level helpers
     # ------------------------------------------------------------------
+
+
     def add_user(self, text: str) -> None:
         QListWidgetItem(f"{_USER_PREFIX} {text}", self.list)
         self.scroll_to_bottom()
@@ -64,3 +66,21 @@ class ChatView(QWidget):
     # ------------------------------------------------------------------
     def scroll_to_bottom(self) -> None:  # noqa: D401 (imperative)
         self.list.scrollToBottom()
+
+    def clear(self) -> None:
+        """
+        Удаляет все сообщения из вида.
+
+        Используется при переключении сессии, чтобы показать новый
+        список сообщений. Проходим по элементам layout-а сверху вниз
+        и корректно удаляем дочерние виджеты (иначе утечка памяти).
+        """
+        self.list.clear()
+
+    def add_message(self, text: str, is_user: bool) -> None:
+        if is_user:
+            self.add_user(text)
+        else:
+            # сразу показываем весь ответ целиком
+            QListWidgetItem(f"{_ASSIST_PREFIX} {text}", self.list)
+            self.scroll_to_bottom()

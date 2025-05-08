@@ -32,3 +32,11 @@ def process(image_path: str, **kwargs) -> str:
         log.info("rembg Lib → %s", dst)
 
     return str(dst)
+
+
+class RemoveBGPlugin(BaseImagePlugin):
+    display_name = "Remove BG"
+    description = "Remove image background via rembg."
+
+    def run(self, image_path: str, **kwargs):
+        return process(image_path, **kwargs)

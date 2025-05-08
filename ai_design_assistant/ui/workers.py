@@ -1,41 +1,46 @@
-"""Background thread helpers for the Qt UI layer.
-
-All tasks that might block the GUI belong here (network calls, heavy image
-processing, etc.). Currently provides **StreamWorker** which streams tokens
-from the active LLM backend via the core router.
 """
+ui.workers
+~~~~~~~~~~
+Фоновые потоки/задачи, чтобы не блокировать UI.
+"""
+
 from __future__ import annotations
 
-import logging
-from typing import Iterable, List
+from typing import Any, List, Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from ai_design_assistant.core import Message, get_global_router
 
-_LOGGER = logging.getLogger(__name__)
+class GenerateThread(QThread):
+    """
+    Выполняет запрос к LLM в отдельном потоке.
+    Излучает:
+        • finished(str) ― полный ответ модели;
+        • error(str)    ― текст исключения.
+    """
 
-
-class StreamWorker(QThread):
-    """Runs :pycode:`router.stream()` in a separate thread and emits tokens."""
-
-    token_received = pyqtSignal(str)
+    finished = pyqtSignal(str)
     error = pyqtSignal(str)
-    finished_success = pyqtSignal()
 
-    def __init__(self, messages: List[Message]):  # noqa: D401 (imperative)
-        super().__init__()
+    def __init__(
+        self,
+        router: Any,
+        messages: List[Any],
+        *,
+        backend: Optional[str] = None,
+        parent: Optional[object] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._router = router
         self._messages = messages
-        self._router = get_global_router()
+        self._backend = backend
 
-    # ------------------------------------------------------------------
-    # QThread implementation
-    # ------------------------------------------------------------------
-    def run(self) -> None:  # noqa: D401 (imperative)
+    # ----------------------------------------- #
+    def run(self) -> None:  # noqa: D401  (коротко)
         try:
-            for token in self._router.stream(self._messages):
-                self.token_received.emit(token)
-            self.finished_success.emit()
+            reply: str = self._router.chat(
+                self._messages, backend=self._backend
+            )  # sync-вызов модели
+            self.finished.emit(reply)
         except Exception as exc:  # pragma: no cover
-            _LOGGER.exception("Stream worker failed")
             self.error.emit(str(exc))

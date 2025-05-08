@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final, Iterable, Self
 
-from appdirs import user_data_dir
+from platformdirs import user_data_dir
 
 _APP_NAME: Final = "AI Design Assistant"
 _CHAT_DIRNAME: Final = "chats"

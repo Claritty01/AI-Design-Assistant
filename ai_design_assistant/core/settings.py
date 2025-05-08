@@ -19,12 +19,16 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Final, Self
 
-from appdirs import user_config_dir
+from platformdirs import user_config_dir
 from dotenv import load_dotenv
 
 _APP_NAME: Final = "AI Design Assistant"
 _SETTINGS_FILE: Final = "settings.json"
 
+DOTENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"   # ← корень репо
+
+# ---> 1. загружаем .env один раз, сразу при импорте модуля
+load_dotenv(dotenv_path=DOTENV_FILE, override=False)
 
 @dataclass
 class Settings:
@@ -34,8 +38,8 @@ class Settings:
     """
 
     # === Secrets ===
-    openai_api_key: str | None = field(default=None, repr=False)
-    deepseek_api_key: str | None = field(default=None, repr=False)
+    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")          # ← читаем уже из env
+    DEEPSEEK_API_KEY: str | None = os.getenv("DEEPSEEK_API_KEY")
 
     # === General ===
     model_provider: str = "openai"  # openai | deepseek | local

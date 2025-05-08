@@ -20,7 +20,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Final
 
-from appdirs import user_config_dir
+from platformdirs import user_config_dir
+
 
 __all__: Final = ["configure_logging"]
 
@@ -34,6 +35,9 @@ _SECRET_ENV_VARS: Final = (
     "OPENAI_API_KEY",
     "DEEPSEEK_API_KEY",
 )
+
+_LOG_PATH = Path.home() / ".local" / "share" / "AI Design Assistant" / "ada.log"
+_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 _SECRET_PATTERN = re.compile(r"(sk-[A-Za-z0-9]{20,})")
 
@@ -72,43 +76,39 @@ _FMT = "% (asctime)s | %(levelname)-8s | %(name)s: %(message)s"
 _DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 
-def configure_logging(level: int = logging.INFO, *, log_path: str | Path | None = None) -> None:
-    """Configure root logger.
-
-    Should be invoked once at application start‑up.
-
-    Parameters
-    ----------
-    level
-        Minimal severity for console output (defaults to ``logging.INFO``).
-    log_path
-        Override default file location. ``None`` ➜ platform config dir.
+def configure_logging(level: str | int = "INFO") -> None:
     """
+    Единая настройка логирования для CLI и GUI.
+
+    • Формат без «лишних» скобок, чтобы бага Python-3.12 не срабатывала.
+    • Пишем и в консоль, и в файл с ротацией.
+    """
+    fmt = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+
     root = logging.getLogger()
-    if root.handlers:  # already configured
-        return
+    root.setLevel(level if isinstance(level, int) else getattr(logging, level.upper()))
 
-    root.setLevel(logging.DEBUG)  # capture everything; handlers filter further
+    # stdout
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
+    root.addHandler(console)
 
-    secret_filter = _SecretFilter()
-
-    # Console handler (stderr)
-    ch = logging.StreamHandler()
-    ch.setLevel(level)
-    ch.setFormatter(logging.Formatter(_FMT, datefmt=_DATEFMT))
-    ch.addFilter(secret_filter)
-    root.addHandler(ch)
-
-    # Rotating file handler
-    fh = RotatingFileHandler(
-        _get_log_path(log_path),
-        maxBytes=_MAX_BYTES,
-        backupCount=_BACKUP_COUNT,
-        encoding="utf-8",
+    # файл с ротацией 1 МБ × 3
+    file_handler = logging.handlers.RotatingFileHandler(
+        _LOG_PATH, maxBytes=1_048_576, backupCount=3, encoding="utf-8"
     )
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter(_FMT, datefmt=_DATEFMT))
-    fh.addFilter(secret_filter)
-    root.addHandler(fh)
+    file_handler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
+    root.addHandler(file_handler)
 
-    logging.getLogger(__name__).debug("Logging configured (level=%s)", logging.getLevelName(level))
+# ------------------------------------------------------------------
+#  Старый API: некоторые плагины делают «from logger import get_logger»
+# ------------------------------------------------------------------
+def get_logger(name: str | None = None):
+    """Совместимость с плагинами старой версии."""
+    import logging
+    return logging.getLogger(name)
+
+# Чтобы «import logger» работал как отдельный модуль
+import sys as _sys
+_sys.modules.setdefault("logger", _sys.modules[__name__])
