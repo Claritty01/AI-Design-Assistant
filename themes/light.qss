@@ -1,0 +1,29 @@
+/* ---------- базовый фон и текст ---------- */
+QWidget           { background:#ffffff; color:#202124; font-size:14px; }
+
+/* ---------- приподнятые панели (sidebars, поля ввода, кнопки) ---------- */
+QListWidget,
+QScrollArea,
+QLineEdit,
+QComboBox,
+QPushButton       { background:#f1f3f4; border:1px solid #c6c8ca; }
+
+/* ---------- выбранные элементы ---------- */
+QListWidget::item:selected { background:#2A6CFF; color:#ffffff; }
+
+/* ---------- кнопки ---------- */
+QPushButton:hover   { background:#467cff; }
+QPushButton:pressed { background:#2A6CFF; }
+
+/* ---------- поле ввода в фокусе / наведение на combo ---------- */
+QLineEdit:focus,
+QComboBox:hover     { border:1px solid #2A6CFF; }
+
+/* ---------- пузыри сообщений ---------- */
+QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#ffffff; border-radius:10px; padding:8px 10px; }
+QLabel[bubbleRole="assistant"] { background:#e8eaed; color:#202124; border-radius:10px; padding:8px 10px; }
+
+/* ---------- иконка‑кнопка (копировать) ---------- */
+QToolButton         { background:transparent; color:#5f6368; border:none; }
+QToolButton:hover   { color:#202124; }
+

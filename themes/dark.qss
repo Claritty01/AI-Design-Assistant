@@ -1,0 +1,29 @@
+/* базовый фон и текст */
+QWidget           { background:#202124; color:#E8EAED; font-size:14px; }
+
+/* приподнятые панели (sidebars) */
+QListWidget,
+QScrollArea,
+QLineEdit,
+QComboBox,
+QPushButton       { background:#2A2C30; border:1px solid #3A3B3E; }
+
+/* выбранные элементы */
+QListWidget::item:selected { background:#3C7DFF; color:#fff; }
+
+/* кнопка при наведении / нажатии */
+QPushButton:hover   { background:#578CFF; }
+QPushButton:pressed { background:#3C7DFF; }
+
+/* поле ввода в фокусе */
+QLineEdit:focus,
+QComboBox:hover     { border:1px solid #3C7DFF; }
+
+/* пузыри */
+QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#fff; border-radius:10px; padding:8px 10px; }
+QLabel[bubbleRole="assistant"] { background:#2A2C30; color:#E8EAED; border-radius:10px; padding:8px 10px; }
+
+/* иконка‑кнопка в пузыре */
+QToolButton         { background:transparent; color:#E8EAED; border:none; }
+QToolButton:hover   { color:#fff; }
+
