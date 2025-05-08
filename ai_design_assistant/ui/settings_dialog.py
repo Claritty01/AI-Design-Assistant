@@ -5,8 +5,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from pathlib import Path
-from settings import AppSettings
-from settings import load_settings, save_settings
+from ai_design_assistant.core.settings import AppSettings
+from ai_design_assistant.core.settings import load_settings, save_settings
 
 
 class SettingsDialog(QDialog):

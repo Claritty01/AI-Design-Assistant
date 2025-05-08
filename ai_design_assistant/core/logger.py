@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 
-LOG_DIR = Path("logs")
+LOG_DIR = Path("../logs")
 LOG_DIR.mkdir(exist_ok=True)
 
 def get_logger(name: str = "app") -> logging.Logger:

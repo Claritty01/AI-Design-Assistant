@@ -12,12 +12,11 @@ If *realesrgan-ncnn-vulkan* is unavailable, PIL resize fallback is used.
 
 import subprocess
 from pathlib import Path
-from typing import Literal
 
 from PIL import Image
 from rembg import remove  # type: ignore
 
-from logger import get_logger
+from ai_design_assistant.core.logger import get_logger
 
 log = get_logger("modules")
 

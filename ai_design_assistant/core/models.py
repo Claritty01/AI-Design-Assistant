@@ -8,10 +8,9 @@ Supported today
 Configuration stored in settings.json under key "llm".
 """
 from typing import Iterator, Tuple, Any, Dict, Callable
-from settings import load_settings, save_settings
-from settings import AppSettings
-import openai_api
-import deepseek_api
+from ai_design_assistant.core.settings import load_settings, save_settings
+from ai_design_assistant.core.settings import AppSettings
+from ai_design_assistant.api import openai_api, deepseek_api
 import openai
 
 # If deepseek_api lacks stream_chat_response, stub it
@@ -26,7 +25,7 @@ def _get_deepseek_fn() -> Callable[..., Iterator[Tuple[str, Any]]]:
 # Mapping model key to (Display Name, streaming function)
 BACKENDS: Dict[str, Tuple[str, Callable[[str, Any], Iterator[Tuple[str, Any]]]]]
 BACKENDS = {
-    "openai":   ("OpenAI",   openai_api.stream_chat_response),
+    "openai":   ("OpenAI", openai_api.stream_chat_response),
     "deepseek": ("DeepSeek", _get_deepseek_fn()),
 }
 

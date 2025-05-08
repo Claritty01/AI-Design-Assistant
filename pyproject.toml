@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "ai-design-assistant"
+version = "0.1.0"
+description = "Desktop AI assistant for designers built with PyQt5."
+authors = ["Claritty"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "ai_design_assistant" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+PyQt6 = "^6.6"
+openai = "^1.14"
+pillow = "^10.2"
+requests = "^2.31"
+deepseek = "^0.3"
+python-dotenv = "^1.0"
+tqdm = "^4.66"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-qt = "^4.4"
+ruff = "^0.4"
+mypy = "^1.10"
+black = "^24.3"
+pyinstaller = "^6.0"
+
+[tool.poetry.plugins."ai_design_assistant.plugins"]
+remove_bg = "ai_design_assistant.plugins.remove_bg_plugin:RemoveBGPlugin"
+upscale = "ai_design_assistant.plugins.upscale_plugin:UpscalePlugin"
+
+[tool.poetry.scripts]
+ada = "ai_design_assistant.__main__:main"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"

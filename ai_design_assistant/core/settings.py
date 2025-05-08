@@ -9,7 +9,7 @@ APP_ID = "AI-Assistant"
 ORG    = "MyCompany"
 
 
-SETTINGS_FILE = "settings.json"
+SETTINGS_FILE = "../data/settings.json"
 
 default_settings = {
     "chat_data_dir": str(Path.cwd() / "chat_data"),

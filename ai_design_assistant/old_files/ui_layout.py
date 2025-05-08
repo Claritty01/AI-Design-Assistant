@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QDialog,
-    QMessageBox, QSlider, QCheckBox, QScrollArea, QToolButton, QSplitter, QSizePolicy
+    QMessageBox, QScrollArea, QToolButton, QSplitter, QSizePolicy
 )
 from PyQt5.QtWidgets import QComboBox
 from model_manager import get_current_model, set_current_model, list_models
@@ -23,16 +23,15 @@ import os
 import shutil
 from pathlib import Path
 
-from logger import get_logger
+from ai_design_assistant.core.logger import get_logger
 from model_manager import stream_chat_response
-from settings import load_settings, save_settings
+from ai_design_assistant.core.settings import load_settings, save_settings
 from chat_history import load_history, save_history, append_message, set_current_chat
 from chat_manager import load_chats, create_new_chat
-from glob import glob
 from plugin_manager import get_plugins
 
 from settings_dialog import SettingsDialog   # <— новый импорт
-from settings import AppSettings             # <— нужен для apply_theme
+from ai_design_assistant.core.settings import AppSettings             # <— нужен для apply_theme
 
 
 
@@ -46,7 +45,7 @@ AI_AVA   = "icons/ai.png"
 
 def list_chat_images(chat_json_name: str) -> list[str]:
     """Вернуть список путей к изображениям, хранящимся в папке текущего чата."""
-    folder = Path("chat_data") / chat_json_name.replace(".json", "")
+    folder = Path("../chat_data") / chat_json_name.replace(".json", "")
     exts = ("*.png", "*.jpg", "*.jpeg", "*.bmp")
     paths: list[str] = []
     for p in exts:
@@ -167,7 +166,7 @@ class ChatWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_chat = create_new_chat()
-        set_current_chat(os.path.join("chat_data", self.current_chat["file"]))
+        set_current_chat(os.path.join("../chat_data", self.current_chat["file"]))
 
         self.chat_history = load_history()
         self.settings = load_settings()
@@ -393,7 +392,7 @@ class ChatWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Выберите изображение", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if not file_path:
             return
-        chat_folder = Path("chat_data") / self.current_chat["file"].replace(".json", "")
+        chat_folder = Path("../chat_data") / self.current_chat["file"].replace(".json", "")
         chat_folder.mkdir(parents=True, exist_ok=True)
         img_idx = len([m for m in self.chat_history if "image" in m]) + 1
         dest = chat_folder / f"image_{img_idx}{Path(file_path).suffix}"
@@ -436,7 +435,7 @@ class ChatWindow(QMainWindow):
         new_chat = create_new_chat(); self.switch_chat(new_chat); self.refresh_chat_list()
 
     def switch_chat(self, chat: dict):
-        self.current_chat = chat; set_current_chat(os.path.join("chat_data", chat["file"]))
+        self.current_chat = chat; set_current_chat(os.path.join("../chat_data", chat["file"]))
         self.chat_history = load_history();
         while self.chat_layout.count() > 1:
             item = self.chat_layout.takeAt(0)

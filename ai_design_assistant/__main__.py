@@ -1,6 +1,6 @@
-# main.py
+# __main__.py
 from PyQt5.QtWidgets import QApplication
-from ui_layout import ChatWindow
+from ai_design_assistant.old_files.ui_layout import ChatWindow
 import sys
 
 if __name__ == "__main__":

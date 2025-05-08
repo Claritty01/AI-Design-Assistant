@@ -1,5 +1,5 @@
 # ——— Виртуальные окружения ———————————————————————
-.venv/
+ai_design_assistant/.venv/
 venv/
 env/
 ENV/

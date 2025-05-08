@@ -9,11 +9,11 @@ from chat_history import load_history
 # ENV & CLIENT INITIALISATION
 # -----------------------------------------------------------------------------
 # • Ключ хранится в .env → OPENAI_API_KEY=<your_key>
-# • .env должен находиться в корне проекта (рядом с main.py)
+# • .env должен находиться в корне проекта (рядом с __main__.py)
 # -----------------------------------------------------------------------------
 
 load_dotenv()  # Загружаем переменные окружения из .env
-from logger import get_logger
+from ai_design_assistant.core.logger import get_logger
 log = get_logger("openai_api")
 
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
