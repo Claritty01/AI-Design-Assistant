@@ -1,101 +1,114 @@
-# settings_dialog.py
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit, QPushButton,
-    QFileDialog, QComboBox, QHBoxLayout, QCheckBox
-)
-from PyQt5.QtCore import Qt
+"""Modal dialog for editing user settings.
+
+This is a lightweight wrapper over :class:`ai_design_assistant.core.settings.Settings`.
+The dialog is *not* persisted by itself; caller must call ``exec()`` and after
+``Accepted`` check *dialog.settings* and decide whether to save.
+"""
+from __future__ import annotations
+
+import logging
 from pathlib import Path
-from ai_design_assistant.core.settings import AppSettings
-from ai_design_assistant.core.settings import load_settings, save_settings
+from typing import Final
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ai_design_assistant.core import Settings
+
+_LOGGER = logging.getLogger(__name__)
+_THEME_CHOICES: Final = ["auto", "light", "dark"]
+_PROVIDER_CHOICES: Final = ["openai", "deepseek", "local"]
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
+    """Blocking dialog to edit high‑level app settings."""
+
+    def __init__(self, parent: QWidget | None = None):  # noqa: D401
         super().__init__(parent)
-        self.setWindowTitle("Настройки")
+        self.setWindowTitle("Preferences")
         self.setModal(True)
-        self.setMinimumWidth(420)
+        self.resize(420, 260)
 
-        # ---------- UI ----------
-        main_layout = QVBoxLayout(self)
-        form = QFormLayout()
+        self.settings = Settings.load()
 
-        # OpenAI-ключ (будет храниться в .env)
-        self.key_edit = QLineEdit(AppSettings.openai_key(), self)
-        self.key_edit.setEchoMode(QLineEdit.Password)
-        form.addRow("OpenAI API‑ключ:", self.key_edit)
+        self._build_ui()
+        self._populate_from_settings()
 
-        # DeepSeek-ключ (будет храниться в .env)
-        self.deepseek_edit = QLineEdit(AppSettings.deepseek_key(), self)
-        self.deepseek_edit.setEchoMode(QLineEdit.Password)
-        form.addRow("DeepSeek API-ключ:", self.deepseek_edit)
+    # ------------------------------------------------------------------
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
 
-        # Папка chat_data
-        h_dir = QHBoxLayout()
-        self.dir_edit = QLineEdit(str(AppSettings.chat_data_dir()), self)
-        browse_btn = QPushButton("…", self)
-        browse_btn.setFixedWidth(28)
-        browse_btn.clicked.connect(self.select_dir)
-        h_dir.addWidget(self.dir_edit, 1)
-        h_dir.addWidget(browse_btn)
-        form.addRow("Папка данных:", h_dir)
+        tabs = QTabWidget()
+        layout.addWidget(tabs, 1)
 
-        # Тема
-        self.theme_combo = QComboBox(self)
-        self.theme_combo.addItems(["System", "Light", "Dark"])
-        idx = self.theme_combo.findText(AppSettings.theme(), Qt.MatchFixedString)
-        self.theme_combo.setCurrentIndex(max(idx, 0))
-        form.addRow("Тема интерфейса:", self.theme_combo)
+        # General tab
+        tab_general = QWidget()
+        fgen = QFormLayout(tab_general)
+        self.cmb_theme = QComboBox()
+        self.cmb_theme.addItems(_THEME_CHOICES)
+        fgen.addRow("Theme", self.cmb_theme)
+        self.cmb_provider = QComboBox()
+        self.cmb_provider.addItems(_PROVIDER_CHOICES)
+        fgen.addRow("Model provider", self.cmb_provider)
+        tabs.addTab(tab_general, "General")
 
-        # Автопрокрутка
-        self.autoscroll_chk = QCheckBox(self)
-        self.autoscroll_chk.setChecked(load_settings().get("autoscroll", True))
-        form.addRow("Автопрокрутка:", self.autoscroll_chk)
+        # Keys tab
+        tab_keys = QWidget()
+        fkeys = QFormLayout(tab_keys)
+        self.le_openai = QLineEdit()
+        self.le_openai.setEchoMode(QLineEdit.EchoMode.Password)
+        fkeys.addRow("OpenAI API key", self.le_openai)
+        self.le_deepseek = QLineEdit()
+        self.le_deepseek.setEchoMode(QLineEdit.EchoMode.Password)
+        fkeys.addRow("DeepSeek API key", self.le_deepseek)
+        tabs.addTab(tab_keys, "Keys")
 
-        # Включить плагины
-        self.plugins_chk = QCheckBox(self)
-        self.plugins_chk.setChecked(load_settings().get("enable_plugins", True))
-        form.addRow("Включить плагины:", self.plugins_chk)
+        # Buttons
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btn_box.accepted.connect(self._on_accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
 
-        main_layout.addLayout(form)
+    # ------------------------------------------------------------------
+    def _populate_from_settings(self) -> None:  # noqa: D401
+        self.cmb_theme.setCurrentText(self.settings.theme)
+        self.cmb_provider.setCurrentText(self.settings.model_provider)
+        if self.settings.openai_api_key:
+            self.le_openai.setText(self.settings.openai_api_key)
+        if self.settings.deepseek_api_key:
+            self.le_deepseek.setText(self.settings.deepseek_api_key)
 
-        # Кнопки
-        btn_box = QHBoxLayout()
-        save_btn = QPushButton("Сохранить", self)
-        cancel_btn = QPushButton("Отмена", self)
-        save_btn.clicked.connect(self.accept)
-        cancel_btn.clicked.connect(self.reject)
-        btn_box.addStretch(1)
-        btn_box.addWidget(save_btn)
-        btn_box.addWidget(cancel_btn)
-        main_layout.addLayout(btn_box)
+    # ------------------------------------------------------------------
+    def _on_accept(self) -> None:  # noqa: D401
+        self.settings.theme = self.cmb_theme.currentText()
+        self.settings.model_provider = self.cmb_provider.currentText()
+        self.settings.openai_api_key = self.le_openai.text().strip() or None
+        self.settings.deepseek_api_key = self.le_deepseek.text().strip() or None
+        self.settings.save()
+        _LOGGER.info("Settings saved")
+        self.accept()
 
 
+# Demo run
+if __name__ == "__main__":  # pragma: no cover
+    import sys
 
+    from PyQt6.QtWidgets import QApplication
 
-    # ---------- helpers ----------
-    def select_dir(self):
-        path = QFileDialog.getExistingDirectory(self, "Выбрать папку данных",
-                                                str(AppSettings.chat_data_dir()))
-        if path:
-            self.dir_edit.setText(path)
-
-    # ---------- QDialog overrides ----------
-    def accept(self):
-        # 1) сохраняем в QSettings
-        AppSettings.set_openai_key(self.key_edit.text().strip())
-        AppSettings.set_deepseek_key(self.deepseek_edit.text().strip())
-        AppSettings.set_chat_data_dir(Path(self.dir_edit.text().strip()))
-        AppSettings.set_theme(self.theme_combo.currentText())
-
-        # 2) и дублируем/записываем в settings.json
-        js = load_settings()
-        js["chat_data_dir"] = self.dir_edit.text().strip()
-        js["theme"] = self.theme_combo.currentText().lower()
-
-        js["autoscroll"]      = self.autoscroll_chk.isChecked()
-        js["enable_plugins"]  = self.plugins_chk.isChecked()
-        save_settings(js)
-
-        super().accept()
-
+    app = QApplication(sys.argv)
+    dlg = SettingsDialog()
+    dlg.exec()
+    print("Theme:", dlg.settings.theme)
