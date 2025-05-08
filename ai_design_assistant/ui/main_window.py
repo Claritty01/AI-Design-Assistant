@@ -108,7 +108,7 @@ class MainWindow(QMainWindow):
         # Right pane placeholder (plugins later)
         right_pane = QWidget()
         right_layout = QVBoxLayout(right_pane)
-        right_layout.addWidget(QWidget())  # TODO: plugin panel
+        right_layout.addWidget(QWidget())  # tod: plugin panel
 
         self.splitter.addWidget(left_pane)
         self.splitter.addWidget(right_pane)
