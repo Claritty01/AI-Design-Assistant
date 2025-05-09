@@ -269,7 +269,33 @@ class MainWindow(QMainWindow):
         thread.deleteLater()
 
     def _on_attachment(self, path: Path) -> None:
-        self._on_user_text(f"[Image] {path.name}")
+        if not self.current:
+            return
+
+            # 1. Добавляем сообщение с изображением
+        msg = Message(role="user", content=f"[Image] {path.name}", image=str(path))
+        self.current.messages.append(msg)
+        self.current.save()
+
+        # 2. Добавляем в UI
+        self.chat_view.add_message(f"[Image] {path.name}", is_user=True)
+
+        # 3. Запускаем генерацию
+        if any(t.isRunning() for t in self._threads):
+            QMessageBox.warning(self, "Wait", "The model is still responding…")
+            return
+
+        assistant_bubble = self.chat_view.add_message("", is_user=False)
+        self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
+
+        worker = GenerateThread(self.router, list(self.current.messages))
+        worker.token_received.connect(self._on_token_received)
+        worker.finished.connect(self._on_llm_reply)
+        worker.error.connect(self._on_llm_error)
+        worker.finished.connect(lambda: self._cleanup_thread(worker))
+        worker.error.connect(lambda _: self._cleanup_thread(worker))
+        worker.start()
+        self._threads.append(worker)
 
     def _load_chats(self) -> None:
         for session in ChatSession.load_all():
