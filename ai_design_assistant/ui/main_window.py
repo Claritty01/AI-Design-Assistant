@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent, QThread
 from PyQt6.QtGui import QAction, QIcon, QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -110,6 +110,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("AI Design Assistant")
         self.resize(1200, 780)
+        # храним ссылки на работающие потоки, чтобы их не прибило GC
+        self._threads: list[QThread] = []
 
         self.router = LLMRouter()
         self.sessions: List[ChatSession] = []
@@ -193,10 +195,26 @@ class MainWindow(QMainWindow):
         self.current.messages.append(msg)
         self.chat_view.add_message(text, is_user=True)
 
+        # не запускаем второй поток, пока первый не закончился
+        if any(t.isRunning() for t in self._threads):
+            QMessageBox.warning(self, "Подождите", "Модель ещё отвечает.")
+            return
+
         worker = GenerateThread(self.router, list(self.current.messages))
         worker.finished.connect(self._on_llm_reply)
         worker.error.connect(self._on_llm_error)
+        # когда поток отработал — удаляем из списка и аккуратно уничтожаем
+        worker.finished.connect(lambda: self._cleanup_thread(worker))
+        worker.error.connect(lambda _: self._cleanup_thread(worker))
         worker.start()
+        self._threads.append(worker)
+
+    def _cleanup_thread(self, thread: QThread) -> None:
+        try:
+            self._threads.remove(thread)
+        except ValueError:
+            pass
+        thread.deleteLater()
 
     def _on_attachment(self, path: Path) -> None:
         self._on_user_text(f"[Image] {path.name}")
