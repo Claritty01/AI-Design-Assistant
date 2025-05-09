@@ -217,6 +217,7 @@ class MainWindow(QMainWindow):
         # append user message
         user_msg = Message(role="user", content=text)
         self.current.messages.append(user_msg)
+        self.current.save()
         self.chat_view.add_message(text, is_user=True)
 
         # guard: only one generation at a time
@@ -250,6 +251,7 @@ class MainWindow(QMainWindow):
             return
         final_text = self.current.assistant_bubble.text_label.text()  # type: ignore[attr-defined]
         self.current.messages.append(Message(role="assistant", content=final_text))
+        self.current.save()
         delattr(self.current, "assistant_bubble")
 
     def _on_llm_error(self, err: str) -> None:

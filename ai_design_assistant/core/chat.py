@@ -24,6 +24,10 @@ from platformdirs import user_data_dir
 import logging
 logger = logging.getLogger(__name__)  # ← Добавить
 
+import uuid
+from datetime import datetime
+from pathlib import Path
+
 _APP_NAME: Final = "AI Design Assistant"
 _CHAT_DIRNAME: Final = "chats"
 _DEFAULT_TITLE: Final = "Untitled chat"
@@ -65,6 +69,7 @@ class ChatSession:
     def add_message(self, role: str, content: str) -> Message:
         msg = Message(role=role, content=content)
         self.messages.append(msg)
+        self.save()
         return msg
 
     def __iter__(self) -> Iterable[Message]:
@@ -81,12 +86,25 @@ class ChatSession:
 
     @classmethod
     def _generate_filename(cls) -> Path:
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        chat_uuid = uuid.uuid4().hex
-        chat_dir = cls._chats_root() / f"chat_{chat_uuid}"
-        chat_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Creating chat directory: {chat_dir}")
-        return chat_dir / "chat.json"
+        """
+        Создаёт папку chat_N внутри настроенной директории *chats*
+        и возвращает путь …/chat_N/chat_N.json.
+        """
+
+        root = cls._chats_root()
+
+        # ищем уже существующие «chat_Х»
+        nums = [
+            int(p.name.split("_")[1])
+            for p in root.iterdir()
+            if p.is_dir() and p.name.startswith("chat_") and p.name.split("_")[1].isdigit()
+        ]
+        next_num = max(nums, default=0) + 1
+
+        chat_dir = root / f"chat_{next_num}"
+        chat_dir.mkdir(parents=True, exist_ok=False)
+        logger.info("Creating chat directory: %s", chat_dir)
+        return chat_dir / f"chat_{next_num}.json"
 
     @classmethod
     def load(cls, path: str | Path) -> "ChatSession":
@@ -163,4 +181,5 @@ class ChatSession:
             image=str(target_path.relative_to(self._chats_root()))
         )
         self.messages.append(msg)
+        self.save()
         return msg
