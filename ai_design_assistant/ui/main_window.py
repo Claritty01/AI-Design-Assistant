@@ -1,11 +1,11 @@
-# ai_design_assistant/ui/main_window.py
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 from typing import List, Optional
 
-from PyQt6.QtGui import QAction, QIcon, QKeyEvent, QPixmap
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QIcon, QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QStyle,
@@ -24,19 +25,17 @@ from PyQt6.QtWidgets import (
 )
 
 # ────────────────────────────────────────────────
-#  internal imports ― пути поправлены
+#  internal imports
 # ────────────────────────────────────────────────
-from ai_design_assistant.core.models import LLMRouter  # ⬅️ moved
-from ai_design_assistant.ui.chat_view import ChatView
-
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtWidgets import QMessageBox
 from ai_design_assistant.core.chat import ChatSession, Message
+from ai_design_assistant.core.models import LLMRouter
+from ai_design_assistant.core.settings import Settings
+from ai_design_assistant.ui.chat_view import ChatView
+from ai_design_assistant.ui.settings_dialog import SettingsDialog
+from ai_design_assistant.ui.theme_utils import load_stylesheet
 from ai_design_assistant.ui.workers import GenerateThread
 
-
 ASSETS = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
-
 USER_ICON = ASSETS / "user.png"
 AI_ICON = ASSETS / "ai.png"
 
@@ -45,27 +44,28 @@ AI_ICON = ASSETS / "ai.png"
 # │                   Helpers                    │
 # ╰──────────────────────────────────────────────╯
 class EnterTextEdit(QTextEdit):
-    """QTextEdit → emit sendRequested on bare Enter (Shift + Enter → newline)."""
+    """QTextEdit → emit sendRequested on bare Enter (Shift+Enter = newline)."""
+
     sendRequested = pyqtSignal()
 
-    def keyPressEvent(self, ev: QKeyEvent) -> None:
+    def keyPressEvent(self, ev: QKeyEvent) -> None:  # noqa: D401
         if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
-                ev.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            ev.modifiers() & Qt.KeyboardModifier.ShiftModifier
         ):
             self.sendRequested.emit()
-            return  # откусываем перевод строки
+            return  # suppress newline
         super().keyPressEvent(ev)
-
 
 
 class InputBar(QWidget):
     sendClicked = pyqtSignal(str)
     imageAttached = pyqtSignal(Path)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:  # noqa: D401
         super().__init__(parent)
         self._build_ui()
 
+    # ------------------------------------------------------------------#
     def _build_ui(self) -> None:
         lay = QHBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
@@ -82,7 +82,9 @@ class InputBar(QWidget):
         attach_btn.clicked.connect(self._attach_image)
 
         send_btn = QPushButton(self)
-        send_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowForward))
+        send_btn.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowForward)
+        )
         send_btn.setToolTip("Send")
         send_btn.clicked.connect(self._emit_send)
 
@@ -90,7 +92,9 @@ class InputBar(QWidget):
         lay.addWidget(self.text_edit, 1)
         lay.addWidget(send_btn)
 
-    # ――― slots ――― #
+    # ------------------------------------------------------------------#
+    # slots
+    # ------------------------------------------------------------------#
     def _emit_send(self) -> None:
         text = self.text_edit.toPlainText().strip()
         if text:
@@ -112,11 +116,12 @@ class InputBar(QWidget):
 # │                 MainWindow                   │
 # ╰──────────────────────────────────────────────╯
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self) -> None:  # noqa: D401
         super().__init__()
         self.setWindowTitle("AI Design Assistant")
         self.resize(1200, 780)
-        # храним ссылки на работающие потоки, чтобы их не прибило GC
+
+        # keep references to active threads to avoid premature GC
         self._threads: list[QThread] = []
 
         self.router = LLMRouter()
@@ -124,15 +129,16 @@ class MainWindow(QMainWindow):
         self.current: Optional[ChatSession] = None
 
         self._build_ui()
-        self._create_menu()
-        self._new_chat()  # стартовая сессия
+        self._new_chat()  # initial session
 
-    # ――― UI каркас ――― #
+    # ------------------------------------------------------------------#
+    # UI layout
+    # ------------------------------------------------------------------#
     def _build_ui(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.setCentralWidget(splitter)
 
-        # left sidebar
+        # ── left sidebar ────────────────────────────────────────────────
         left = QWidget(self)
         l_lay = QVBoxLayout(left)
         new_btn = QPushButton("＋ New chat")
@@ -140,12 +146,13 @@ class MainWindow(QMainWindow):
         self.chat_list = QListWidget()
         self.chat_list.itemClicked.connect(self._switch_chat)
         settings_btn = QPushButton("⚙ Settings")
-        settings_btn.clicked.connect(lambda: QMessageBox.information(self, "Settings", "todo"))
+        settings_btn.setToolTip("Open preferences (Ctrl+,)")
+        settings_btn.clicked.connect(self._open_settings)
         l_lay.addWidget(new_btn)
         l_lay.addWidget(self.chat_list, 1)
         l_lay.addWidget(settings_btn)
 
-        # center (chat)
+        # ── centre (chat) ──────────────────────────────────────────────
         center = QWidget(self)
         c_lay = QVBoxLayout(center)
         self.chat_view = ChatView(self)
@@ -155,7 +162,7 @@ class MainWindow(QMainWindow):
         c_lay.addWidget(self.chat_view, 1)
         c_lay.addWidget(self.input_bar)
 
-        # right sidebar (plugins)
+        # ── right sidebar (plugins) ────────────────────────────────────
         right = QTabWidget(self)
         right.setMinimumWidth(260)
         right.addTab(QLabel("Upscale (todo)"), "Upscale")
@@ -166,12 +173,19 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right)
         splitter.setSizes([220, 700, 280])
 
-    def _create_menu(self) -> None:
-        quit_action = QAction("Quit", self)
-        quit_action.triggered.connect(QApplication.instance().quit)
-        self.menuBar().addAction(quit_action)
+    # ------------------------------------------------------------------#
+    # Settings dialog helper
+    # ------------------------------------------------------------------#
+    def _open_settings(self) -> None:
+        dlg = SettingsDialog(self)
+        if dlg.exec() == dlg.accepted:
+            # reload stylesheet according to saved theme
+            style = load_stylesheet(Settings.load().theme)
+            QApplication.instance().setStyleSheet(style)
 
-    # ――― chat-session helpers ――― #
+    # ------------------------------------------------------------------#
+    # Chat-session helpers
+    # ------------------------------------------------------------------#
     def _new_chat(self) -> None:
         session = ChatSession()
         self.sessions.append(session)
@@ -193,55 +207,57 @@ class MainWindow(QMainWindow):
         for m in session.messages:
             self.chat_view.add_message(m.content, is_user=(m.role == "user"))
 
-    # ――― sending / receiving ――― #
-    def _on_user_text(self, text: str) -> None:
-        try:
-            if not self.current:
-                return
-            msg = Message(role="user", content=text)
-            self.current.messages.append(msg)
-            self.chat_view.add_message(text, is_user=True)
+    # ------------------------------------------------------------------#
+    # Sending / receiving
+    # ------------------------------------------------------------------#
+    def _on_user_text(self, text: str) -> None:  # noqa: C901 – verbose but straightforward
+        if not self.current:
+            return
 
-            if any(t.isRunning() for t in self._threads):
-                QMessageBox.warning(self, "Подождите", "Модель ещё отвечает.")
-                return
+        # append user message
+        user_msg = Message(role="user", content=text)
+        self.current.messages.append(user_msg)
+        self.chat_view.add_message(text, is_user=True)
 
-            # Создаем пустой пузырь для ассистента
-            assistant_bubble = self.chat_view.add_message("", is_user=False)
-            self.current.assistant_bubble = assistant_bubble  # Сохраняем ссылку
+        # guard: only one generation at a time
+        if any(t.isRunning() for t in self._threads):
+            QMessageBox.warning(self, "Wait", "The model is still responding…")
+            return
 
-            worker = GenerateThread(self.router, list(self.current.messages))
-            worker.token_received.connect(self._on_token_received)
-            worker.finished.connect(self._on_llm_reply)
-            worker.error.connect(self._on_llm_error)
-            worker.finished.connect(lambda: self._cleanup_thread(worker))
-            worker.error.connect(lambda _: self._cleanup_thread(worker))
-            worker.start()
-            self._threads.append(worker)
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Ошибка",
-                f"Ошибка при отправке сообщения: {e}"
-            )
-            raise
+        # create empty assistant bubble for streaming
+        assistant_bubble = self.chat_view.add_message("", is_user=False)
+        self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
+
+        worker = GenerateThread(self.router, list(self.current.messages))
+        worker.token_received.connect(self._on_token_received)
+        worker.finished.connect(self._on_llm_reply)
+        worker.error.connect(self._on_llm_error)
+        worker.finished.connect(lambda: self._cleanup_thread(worker))
+        worker.error.connect(lambda _: self._cleanup_thread(worker))
+        worker.start()
+        self._threads.append(worker)
 
     def _on_token_received(self, token: str) -> None:
-        """Обновляет текст в пузыре ассистента по мере получения токенов."""
+        """Stream token-by-token into assistant bubble."""
         if not self.current or not hasattr(self.current, "assistant_bubble"):
             return
-        current_text = self.current.assistant_bubble.text_label.text()
-        self.current.assistant_bubble.text_label.setText(current_text + token)
+        lbl = self.current.assistant_bubble.text_label  # type: ignore[attr-defined]
+        lbl.setText(lbl.text() + token)
         self.chat_view.scroll_to_bottom()
 
-    def _on_llm_reply(self, reply: str) -> None:
+    def _on_llm_reply(self, _: str) -> None:
         if not self.current or not hasattr(self.current, "assistant_bubble"):
             return
-        self.current.messages.append(
-            Message(role="assistant", content=self.current.assistant_bubble.text)
-        )
-        del self.current.assistant_bubble  # Очищаем временную переменную
+        final_text = self.current.assistant_bubble.text_label.text()  # type: ignore[attr-defined]
+        self.current.messages.append(Message(role="assistant", content=final_text))
+        delattr(self.current, "assistant_bubble")
 
+    def _on_llm_error(self, err: str) -> None:
+        QMessageBox.critical(self, "LLM error", err)
+
+    # ------------------------------------------------------------------#
+    # Misc helpers
+    # ------------------------------------------------------------------#
     def _cleanup_thread(self, thread: QThread) -> None:
         try:
             self._threads.remove(thread)
@@ -252,19 +268,18 @@ class MainWindow(QMainWindow):
     def _on_attachment(self, path: Path) -> None:
         self._on_user_text(f"[Image] {path.name}")
 
-    def _on_llm_reply(self, reply: str) -> None:
-        if not self.current:
-            return
-        self.current.messages.append(Message(role="assistant", content=reply))
-        self.chat_view.add_message(reply, is_user=False)
-
-    def _on_llm_error(self, err: str) -> None:
-        QMessageBox.critical(self, "LLM error", err)
-
 
 # ────────────────────────────────────────────────
-def main() -> None:
+# Entry-point convenience (dev only)
+# ────────────────────────────────────────────────
+
+def main() -> None:  # pragma: no cover
     app = QApplication(sys.argv)
+
+    # apply stylesheet *before* showing window
+    style = load_stylesheet(Settings.load().theme)
+    app.setStyleSheet(style)
+
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

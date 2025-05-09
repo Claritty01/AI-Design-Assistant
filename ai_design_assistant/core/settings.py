@@ -1,15 +1,19 @@
-"""Application‑wide settings (core layer — no PyQt dependency).
+"""Framework-agnostic user settings.
 
-The settings live in a JSON file under the user configuration directory
-(``~/.config/AI Design Assistant/settings.json`` or OS‑specific equivalent).
-On top of that we support a classic ``.env`` for secrets during development.
+* JSON*-часть (data/settings.json) хранит **не-секретные** параметры:
+    • chats_path            – где лежат .chat-файлы
+    • model_provider        – openai | deepseek | local
+    • theme                 – light | dark | auto
+    • language              – 'en', 'ru', …
+    • plugins_enabled       – {plugin_name: bool}
 
-Usage
------
->>> Settings.load_dotenv()  # optional, only once
->>> s = Settings.load()
->>> s.model_provider = "deepseek"
->>> s.save()
+* .env (в корне репозитория) хранит только API-ключи, установлен­ные
+  через SettingsDialog.  Файл создаётся при первом сохранении ключа.
+
+Все высокоуровневые методы сведены к:
+    Settings.load()   → экземпляр
+    s.save()          → записывает JSON
+    Settings.set_env_var("OPENAI_API_KEY", "...")  → правит .env
 """
 from __future__ import annotations
 
@@ -18,97 +22,123 @@ import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Final, Self
+from dataclasses import fields
 
-from platformdirs import user_config_dir
 from dotenv import load_dotenv
 
-_APP_NAME: Final = "AI Design Assistant"
-_SETTINGS_FILE: Final = "settings.json"
+# ---------------------------------------------------------------------------#
+#  Файлы                                                                      #
+# ---------------------------------------------------------------------------#
+_BASE_DIR: Final = Path(__file__).resolve().parent.parent.parent
+JSON_PATH: Final = Path(__file__).with_suffix("").parent.parent / "data" / "settings.json"
+JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-DOTENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"   # ← корень репо
+DOTENV_PATH: Final = _BASE_DIR / ".env"          # secrets
+load_dotenv(dotenv_path=DOTENV_PATH, override=False)   # не падаем, если .env нет
 
-# ---> 1. загружаем .env один раз, сразу при импорте модуля
-load_dotenv(dotenv_path=DOTENV_FILE, override=False)
-
+# ---------------------------------------------------------------------------#
+#  Dataclass                                                                  #
+# ---------------------------------------------------------------------------#
 @dataclass
 class Settings:
-    """Serializable user settings.
-
-    *Do not* import PyQt classes here; keep this module framework‑agnostic.
-    """
-
-    # === Secrets ===
-    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")          # ← читаем уже из env
-    DEEPSEEK_API_KEY: str | None = os.getenv("DEEPSEEK_API_KEY")
-
-    # === General ===
-    model_provider: str = "openai"  # openai | deepseek | local
-    theme: str = "auto"  # light | dark | auto
+    # ========= General ========= #
+    chats_path: str = "chats"
+    model_provider: str = "openai"          # openai | deepseek | local
+    theme: str = "auto"                     # light | dark | auto
     language: str = "en"
 
-    # === Last session ===
-    last_chat_path: str | None = None
+    # ========= Plugins ========= #
+    plugins_enabled: dict[str, bool] = field(default_factory=dict)
 
-    # path is not saved to file, set by load()
+    # --- internal (не сериализуем) --- #
     _path: Path | None = field(default=None, init=False, repr=False, compare=False)
 
-    # ---------------------------------------------------------------------
-    # Persistence helpers
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------#
+    #  Persistence helpers                                              #
+    # ------------------------------------------------------------------#
     @classmethod
-    def _config_path(cls) -> Path:
-        cfg_dir = Path(user_config_dir(_APP_NAME))
-        cfg_dir.mkdir(parents=True, exist_ok=True)
-        return cfg_dir / _SETTINGS_FILE
+    def _cfg_path(cls) -> Path:
+        return JSON_PATH
 
     @classmethod
-    def load(cls) -> "Settings":
-        path = cls._config_path()
-        if path.exists():
-            try:
-                data = json.loads(path.read_text("utf-8"))
-            except json.JSONDecodeError:
-                data = {}
-        else:
+    def load(cls) -> Self:
+        path = cls._cfg_path()
+        try:
+            data = json.loads(path.read_text("utf-8")) if path.exists() else {}
+        except json.JSONDecodeError:
             data = {}
 
-        settings = cls(**data)  # type: ignore[arg-type]
-        settings._path = path
-        return settings
+        # ── отбрасываем поля, которых нет в dataclass ── #
+        allowed = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in allowed}
+
+        inst = cls(**data)
+        inst._path = path
+        inst._ensure_plugins_dict()
+        return inst
+
+    # ------------------------------------------------------------------#
+    # .env convenience (back-compat for __main__)                      #
+    # ------------------------------------------------------------------#
+    @ staticmethod
+    def load_dotenv(dotenv_path: str | Path | None = None) -> None:  # noqa: D401
+        """Load variables from a .env file (noop if already done)."""
+        load_dotenv(dotenv_path or DOTENV_PATH, override=False)
 
     def save(self) -> None:
         if self._path is None:
-            self._path = self._config_path()
-        with self._path.open("w", encoding="utf-8") as fp:
-            json.dump(asdict(self, dict_factory=lambda x: {k: v for k, v in x if not k.startswith("_")}), fp, indent=2)
+            self._path = self._cfg_path()
+        self._path.write_text(
+            json.dumps(
+                asdict(
+                    self,
+                    dict_factory=lambda items: {k: v for k, v in items if not k.startswith("_")},
+                ),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
-    # ------------------------------------------------------------------
-    # .env support
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------#
+    #  .env helpers (static)                                            #
+    # ------------------------------------------------------------------#
     @staticmethod
-    def load_dotenv(dotenv_path: str | Path | None = None) -> None:  # noqa: D401 (imperative)
-        """Load variables from .env (development only).
+    def set_env_var(key: str, value: str | None) -> None:
+        """Write **key=value** into .env (create if missing)."""
+        key = key.upper()
+        env_lines: list[str] = []
+        if DOTENV_PATH.exists():
+            env_lines = DOTENV_PATH.read_text("utf-8").splitlines()
 
-        Called once at application start‑up. Ignores if file missing.
-        """
-        load_dotenv(dotenv_path)
+        # перезаписываем или добавляем
+        filtered = [ln for ln in env_lines if not ln.startswith(f"{key}=")]
+        if value:
+            filtered.append(f"{key}={value}")
 
-    # ------------------------------------------------------------------
-    # Helper accessors
-    # ------------------------------------------------------------------
+        DOTENV_PATH.write_text("\n".join(filtered) + "\n", encoding="utf-8")
+        os.environ[key] = value or ""
+
+    # ------------------------------------------------------------------#
+    #  Convenience getters                                              #
+    # ------------------------------------------------------------------#
     @property
-    def active_api_key(self) -> str | None:
-        match self.model_provider:
-            case "openai":
-                return self.openai_api_key or os.getenv("OPENAI_API_KEY")
-            case "deepseek":
-                return self.deepseek_api_key or os.getenv("DEEPSEEK_API_KEY")
-            case _:
-                return None
+    def openai_api_key(self) -> str | None:
+        return os.getenv("OPENAI_API_KEY")
 
-    # Convenience: update from env once after load
-    def sync_with_env(self) -> None:
-        if not self.openai_api_key and (v := os.getenv("OPENAI_API_KEY")):
-            self.openai_api_key = v
-        if not self.deepseek_api_key and (v := os.getenv("DEEPSEEK_API_KEY")):
-            self.deepseek_api_key = v
+    @property
+    def deepseek_api_key(self) -> str | None:
+        return os.getenv("DEEPSEEK_API_KEY")
+
+    # ------------------------------------------------------------------#
+    #  Internals                                                        #
+    # ------------------------------------------------------------------#
+    def _ensure_plugins_dict(self) -> None:
+        """Если первый запуск — включаем все плагины, найденные в /plugins."""
+        if self.plugins_enabled:
+            return
+        plugins_dir = Path(__file__).with_suffix("").parent.parent / "plugins"
+        self.plugins_enabled = {
+            p.stem: True
+            for p in plugins_dir.glob("*.py")
+            if p.name not in {"__init__.py", ""}
+        }

@@ -25,6 +25,7 @@ from ai_design_assistant.core.settings import Settings
 from ai_design_assistant.core.logger import configure_logging
 
 
+
 def main() -> None:
     """Launch the Qt GUI application."""
     # When packaged with PyInstaller, change cwd so relative resource paths work
@@ -41,12 +42,12 @@ def main() -> None:
     QCoreApplication.setOrganizationName("AI Design Assistant")
     app = QApplication(sys.argv)
 
-    themes_dir = Path(__file__).with_suffix("").parent / "resources" / "themes"
-    style = (themes_dir / "dark.qss").read_text()  # или dark.qss
-    style += (themes_dir / "chat.qss").read_text()
+    # 5️⃣  Применяем тему до создания MainWindow
+    from ai_design_assistant.ui.theme_utils import load_stylesheet
+    style = load_stylesheet(Settings.load().theme)
     app.setStyleSheet(style)
 
-    # 4️⃣  Main UI
+    # 6️⃣ Main UI
     window = MainWindow()
     window.show()
 
