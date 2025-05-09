@@ -44,6 +44,9 @@ class Message:
 @dataclass
 class ChatSession:
     """Container for chat messages and file persistence."""
+    def __init__(self):
+        self.uuid = str(uuid.uuid4())  # Генерация уникального идентификатора
+        self.messages = []
 
     title: str = _DEFAULT_TITLE
     messages: list[Message] = field(default_factory=list)

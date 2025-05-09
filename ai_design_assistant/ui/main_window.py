@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent, QThread
 from PyQt6.QtGui import QAction, QIcon, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -15,9 +14,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QPushButton,
-    QScrollArea,
     QSplitter,
     QStyle,
     QTabWidget,
@@ -29,12 +26,14 @@ from PyQt6.QtWidgets import (
 # ────────────────────────────────────────────────
 #  internal imports ― пути поправлены
 # ────────────────────────────────────────────────
-from ai_design_assistant.core.chat import ChatSession, Message  # ⬅️ renamed
 from ai_design_assistant.core.models import LLMRouter  # ⬅️ moved
 from ai_design_assistant.ui.chat_view import ChatView
+
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtWidgets import QMessageBox
+from ai_design_assistant.core.chat import ChatSession, Message
 from ai_design_assistant.ui.workers import GenerateThread
 
-from ai_design_assistant.ui.widgets import MessageBubble
 
 ASSETS = Path(__file__).with_suffix("").parent.parent / "assets" / "icons"
 
@@ -204,7 +203,12 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Подождите", "Модель ещё отвечает.")
                 return
 
+            # Создаем пустой пузырь для ассистента
+            assistant_bubble = self.chat_view.add_message("", is_user=False)
+            self.current.assistant_bubble = assistant_bubble  # Сохраняем ссылку
+
             worker = GenerateThread(self.router, list(self.current.messages))
+            worker.token_received.connect(self._on_token_received)
             worker.finished.connect(self._on_llm_reply)
             worker.error.connect(self._on_llm_error)
             worker.finished.connect(lambda: self._cleanup_thread(worker))
@@ -217,18 +221,23 @@ class MainWindow(QMainWindow):
                 "Ошибка",
                 f"Ошибка при отправке сообщения: {e}"
             )
-            raise  # Перебросить исключение для отладки
+            raise
+
+    def _on_token_received(self, token: str) -> None:
+        """Обновляет текст в пузыре ассистента по мере получения токенов."""
+        if not self.current or not hasattr(self.current, "assistant_bubble"):
+            return
+        current_text = self.current.assistant_bubble.text_label.text()
+        self.current.assistant_bubble.text_label.setText(current_text + token)
+        self.chat_view.scroll_to_bottom()
 
     def _on_llm_reply(self, reply: str) -> None:
-        try:
-            if not self.current:
-                return
-            self.current.messages.append(Message(role="assistant", content=reply))
-            self.chat_view.add_message(reply, is_user=False)
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при получении ответа: {e}")
-            import traceback
-            traceback.print_exc()
+        if not self.current or not hasattr(self.current, "assistant_bubble"):
+            return
+        self.current.messages.append(
+            Message(role="assistant", content=self.current.assistant_bubble.text)
+        )
+        del self.current.assistant_bubble  # Очищаем временную переменную
 
     def _cleanup_thread(self, thread: QThread) -> None:
         try:

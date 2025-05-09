@@ -34,10 +34,11 @@ class ChatView(QWidget):
         main_layout.addWidget(self.scroll_area)
         self.setLayout(main_layout)
 
-    def add_message(self, text: str, is_user: bool, avatar_path: str | None = None):
-        bubble = MessageBubble(text, "user" if is_user else "assistant", avatar_path)
+    def add_message(self, text: str, is_user: bool) -> MessageBubble:
+        bubble = MessageBubble(text, is_user, parent=self.message_container)
         self.message_layout.addWidget(bubble)
-        self.scroll_area.ensureWidgetVisible(bubble)
+        self.scroll_to_bottom()
+        return bubble
 
     def add_user(self, text: str):
         self.add_message(text, is_user=True)
@@ -62,3 +63,7 @@ class ChatView(QWidget):
             item = self.message_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    def scroll_to_bottom(self) -> None:
+        """Прокручивает чат до последнего сообщения."""
+        self.scroll_area.ensureWidgetVisible(self.message_container)

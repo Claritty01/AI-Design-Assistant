@@ -8,10 +8,11 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButt
 import os
 
 class MessageBubble(QWidget):
-    def __init__(self, text: str, role: str, avatar_path: str | None = None):
-        super().__init__()
-        self.role = role  # "user" или "assistant"
-        self._init_ui(text, avatar_path)
+    def __init__(self, text: str, is_user: bool, parent=None):
+        super().__init__(parent)
+        self.role = "user" if is_user else "assistant"
+        self._init_ui(text)
+
 
     def _init_ui(self, text: str, avatar_path: str | None = None):
         # Основной вертикальный лэйаут
@@ -99,5 +100,10 @@ class MessageBubble(QWidget):
                 }
             """
 
+    # В widgets.py
     def copy_text(self):
         QApplication.clipboard().setText(self.text_label.text())
+
+    def set_text(self, text: str):
+        self.text_label.setText(text)
+        self.adjustSize()

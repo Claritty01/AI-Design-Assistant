@@ -11,36 +11,26 @@ from typing import Any, List, Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
-class GenerateThread(QThread):
-    """
-    Выполняет запрос к LLM в отдельном потоке.
-    Излучает:
-        • finished(str) ― полный ответ модели;
-        • error(str)    ― текст исключения.
-    """
+# ai_design_assistant/ui/workers.py
+from PyQt6.QtCore import QThread, pyqtSignal
+from ai_design_assistant.core.models import LLMRouter
 
-    finished = pyqtSignal(str)
+
+class GenerateThread(QThread):
+    token_received = pyqtSignal(str)  # Сигнал для потоковых токенов
+    finished = pyqtSignal(str)        # Сигнал для завершения
     error = pyqtSignal(str)
 
-    def __init__(
-        self,
-        router: Any,
-        messages: List[Any],
-        *,
-        backend: Optional[str] = None,
-        parent: Optional[object] = None,
-    ) -> None:
-        super().__init__(parent)
-        self._router = router
-        self._messages = messages
-        self._backend = backend
+    def __init__(self, router: LLMRouter, messages: list):
+        super().__init__()
+        self.router = router
+        self.messages = messages
 
-    # ----------------------------------------- #
-    def run(self) -> None:  # noqa: D401  (коротко)
+    def run(self):
         try:
-            reply: str = self._router.chat(
-                self._messages, backend=self._backend
-            )  # sync-вызов модели
-            self.finished.emit(reply)
-        except Exception as exc:  # pragma: no cover
-            self.error.emit(str(exc))
+            # Используем метод stream() из backend'а
+            for token in self.router.stream(self.messages):
+                self.token_received.emit(token)  # Отправляем каждый токен
+            self.finished.emit("Stream completed")
+        except Exception as e:
+            self.error.emit(str(e))
