@@ -19,11 +19,14 @@ QPushButton:pressed { background:#3C7DFF; }
 QLineEdit:focus,
 QComboBox:hover     { border:1px solid #3C7DFF; }
 
-/* пузыри */
-QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#fff; border-radius:10px; padding:8px 10px; }
-QLabel[bubbleRole="assistant"] { background:#2A2C30; color:#E8EAED; border-radius:10px; padding:8px 10px; }
 
 /* иконка‑кнопка в пузыре */
 QToolButton         { background:transparent; color:#E8EAED; border:none; }
 QToolButton:hover   { color:#fff; }
 
+QLabel#assistant_bubble { background:#373737; color:#DDD; }
+QLabel#user_bubble      { background:#1E6EF5; color:#fff;  }
+
+/* пузыри */
+QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#fff; border-radius:10px; padding:8px 10px; }
+QLabel[bubbleRole="assistant"] { background:#2A2C30; color:#E8EAED; border-radius:10px; padding:8px 10px; }

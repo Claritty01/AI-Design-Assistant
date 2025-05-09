@@ -19,11 +19,14 @@ QPushButton:pressed { background:#2A6CFF; }
 QLineEdit:focus,
 QComboBox:hover     { border:1px solid #2A6CFF; }
 
-/* ---------- пузыри сообщений ---------- */
-QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#ffffff; border-radius:10px; padding:8px 10px; }
-QLabel[bubbleRole="assistant"] { background:#e8eaed; color:#202124; border-radius:10px; padding:8px 10px; }
 
 /* ---------- иконка‑кнопка (копировать) ---------- */
 QToolButton         { background:transparent; color:#5f6368; border:none; }
 QToolButton:hover   { color:#202124; }
 
+QLabel#assistant_bubble { background:#F5F5F5; color:#222; }
+QLabel#user_bubble      { background:#4E8CFF; color:#fff;  }
+
+/* ---------- пузыри сообщений ---------- */
+QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#ffffff; border-radius:10px; padding:8px 10px; }
+QLabel[bubbleRole="assistant"] { background:#e8eaed; color:#202124; border-radius:10px; padding:8px 10px; }
