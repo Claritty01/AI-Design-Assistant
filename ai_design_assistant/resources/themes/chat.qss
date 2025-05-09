@@ -1,10 +1,54 @@
-/* Пользователь */
-QWidget#user_bubble {
-    background: #DCF8C6;
-    color: #333;
+/* ----------------------------------------------------------------------
+   Chat bubbles stylesheet
+   This file is included AFTER light.qss / dark.qss so it can override
+   theme‑generic colours with role‑specific ones.
+   -------------------------------------------------------------------*/
+
+/* === Assistant message (left) =======================================*/
+QLabel#assistant_bubble {
+    /* Light gray bubble with subtle border */
+    background-color: rgb(245, 245, 245);
+    color: #222;
+    padding: 10px 14px;
+    border: 1px solid rgba(0, 0, 0, 18%);
+    border-radius: 14px;      /* <‑‑ smooth corners */
+    max-width: 540px;         /* reasonable readable width */
 }
-/* Ассистент */
-QWidget#assistant_bubble {
-    background: #F0F0F0;
+
+/* Text selection inside assistant bubble */
+QLabel#assistant_bubble:selection {
+    background: rgb(158, 199, 255);
     color: #000;
+}
+
+/* === User message (right) ==========================================*/
+QLabel#user_bubble {
+    background-color: rgb(78, 140, 255);   /* accent colour */
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 14px;
+    max-width: 540px;
+}
+
+QLabel#user_bubble:selection {
+    background: rgb(214, 228, 255);
+    color: #000;
+}
+
+/* === Dark‑theme overrides ==========================================
+   If you load dark.qss after this file, place identical selectors there to
+   override colours — e.g. darker gray for assistant, deep blue for user.
+   Or keep chat.qss last and use palette‑aware colours below  ➜
+*/
+
+/* Assistant bubble in dark theme (palette detection) */
+@dark {
+    QLabel#assistant_bubble {
+        background-color: rgb(55, 55, 55);
+        color: #ddd;
+        border: 1px solid rgba(255, 255, 255, 10%);
+    }
+    QLabel#user_bubble {
+        background-color: rgb(30, 110, 245);
+    }
 }

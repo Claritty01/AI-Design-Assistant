@@ -35,7 +35,10 @@ from ai_design_assistant.core.chat import ChatSession, Message
 from ai_design_assistant.ui.workers import GenerateThread
 
 
-ASSETS = Path(__file__).with_suffix("").parent.parent / "assets" / "icons"
+ASSETS = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
+
+USER_ICON = ASSETS / "user.png"
+AI_ICON = ASSETS / "ai.png"
 
 
 # ╭──────────────────────────────────────────────╮

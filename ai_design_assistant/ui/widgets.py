@@ -1,109 +1,116 @@
-# ai_design_assistant/ui/widgets.py
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QGraphicsDropShadowEffect
+"""Reusable Qt widgets for AI Design Assistant UI."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QEvent, QTimer
-from PyQt6.QtGui import QFont, QPixmap, QIcon
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QSizePolicy, QApplication
-import os
+from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtWidgets import (
+    QApplication,
+    QLabel,
+    QToolButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QSizePolicy,
+)
+
+ICONS_DIR = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
+
 
 class MessageBubble(QWidget):
-    def __init__(self, text: str, is_user: bool, parent=None):
+    """Single chat message bubble.
+
+    Parameters
+    ----------
+    text
+        Message text.
+    is_user
+        ``True`` – message was sent by user, ``False`` – by assistant.
+    parent
+        Optional Qt parent.
+    """
+
+    def __init__(self, text: str, is_user: bool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+
         self.role = "user" if is_user else "assistant"
         self._init_ui(text)
 
+    # ---------------------------------------------------------------------#
+    #                               UI                                     #
+    # ---------------------------------------------------------------------#
+    def _init_ui(self, text: str, avatar_path: str | os.PathLike | None = None) -> None:
+        # Fallback avatar
+        if avatar_path is None:
+            default_icon = "user.png" if self.role == "user" else "ai.png"
+            avatar_path = ICONS_DIR / default_icon
 
-    def _init_ui(self, text: str, avatar_path: str | None = None):
-        # Основной вертикальный лэйаут
-        main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(4)
-        main_layout.setContentsMargins(6, 6, 6, 6)
+        # ----- Layouts ---------------------------------------------------#
+        root = QVBoxLayout(self)
+        root.setSpacing(4)
+        root.setContentsMargins(6, 6, 6, 6)
 
-        # Текст сообщения
-        self.text_label = QLabel(text)
-        self.text_label.setWordWrap(True)
-        self.text_label.setProperty("bubbleRole", self.role)
-        self.text_label.setStyleSheet(self._get_bubble_style())
+        #  Avatar + text in a single row
+        row = QHBoxLayout()
+        row.setSpacing(6)
 
-        # Аватарка
-        self.avatar_label = QLabel()
-        if avatar_path and os.path.exists(avatar_path):
-            pixmap = QPixmap(avatar_path).scaled(36, 36, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            self.avatar_label.setPixmap(pixmap)
+        # Avatar label
+        avatar_lbl = QLabel()
+        if avatar_path and Path(avatar_path).exists():
+            pixmap = QPixmap(str(avatar_path)).scaled(
+                36,
+                36,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            avatar_lbl.setPixmap(pixmap)
 
-        # Горизонтальный лэйаут для аватарки и текста
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(6)
+        # Text bubble label
+        text_lbl = QLabel(text)
+        text_lbl.setWordWrap(True)
+        text_lbl.setObjectName(f"{self.role}_bubble")  #  <-- QSS hook
 
-        if self.role == "user":
-            # Пользователь: [спейсер][текст][аватар]
-            spacer = QWidget()
-            spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            top_layout.addWidget(spacer)
-            top_layout.addWidget(self.text_label)
-            if self.avatar_label.pixmap():
-                top_layout.addWidget(self.avatar_label)
+        # Assemble row: avatars left for assistant, right for user
+        if self.role == "assistant":
+            if avatar_lbl.pixmap():
+                row.addWidget(avatar_lbl)
+            row.addWidget(text_lbl)
+            row.addStretch(1)
         else:
-            # Ассистент: [аватар][текст][спейсер]
-            if self.avatar_label.pixmap():
-                top_layout.addWidget(self.avatar_label)
-            top_layout.addWidget(self.text_label)
-            spacer = QWidget()
-            spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            top_layout.addWidget(spacer)
+            row.addStretch(1)
+            row.addWidget(text_lbl)
+            if avatar_lbl.pixmap():
+                row.addWidget(avatar_lbl)
 
-        main_layout.addLayout(top_layout)
+        root.addLayout(row)
 
-        # Копировать текст (опционально)
-        self.copy_bar = QWidget()
-        copy_layout = QHBoxLayout(self.copy_bar)
-        copy_layout.setContentsMargins(0, 0, 0, 0)
+        # Optional copy‑button bar ---------------------------------------#
+        self._copy_bar = QWidget()
+        copy_row = QHBoxLayout(self._copy_bar)
+        copy_row.setContentsMargins(0, 0, 0, 0)
+
         copy_btn = QToolButton()
         copy_btn.setText("📋")
-        copy_btn.clicked.connect(self.copy_text)
-        copy_layout.addWidget(copy_btn)
-        self.copy_bar.hide()
-        main_layout.addWidget(self.copy_bar)
+        copy_btn.setToolTip("Copy message text")
+        copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(text_lbl.text()))
 
-        # Тень (вместо box-shadow)
-        self._add_shadow()
+        copy_row.addWidget(copy_btn)
+        self._copy_bar.hide()  # shown on hover via eventFilter later (todo)
+        root.addWidget(self._copy_bar)
 
-    def _add_shadow(self):
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(10)
-        shadow.setColor(Qt.GlobalColor.gray)
-        shadow.setOffset(3, 3)
-        self.setGraphicsEffect(shadow)
+        # Save refs for later use
+        self.text_label = text_lbl
+        self.avatar_label = avatar_lbl
 
-    def _get_bubble_style(self):
-        if self.role == "user":
-            return """
-                QLabel {
-                    background: #DCF8C6;
-                    color: #333;
-                    border-radius: 15px;
-                    padding: 10px;
-                    margin: 5px;
-                    border: 1px solid #ccc;
-                }
-            """
-        else:
-            return """
-                QLabel {
-                    background: #F0F0F0;
-                    color: #000;
-                    border-radius: 15px;
-                    padding: 10px;
-                    margin: 5px;
-                    border: 1px solid #ccc;
-                }
-            """
+        # Remove drop‑shadow (was causing visual noise)
+        # (If future themes require shadow, implement purely in QSS)
 
-    # В widgets.py
-    def copy_text(self):
-        QApplication.clipboard().setText(self.text_label.text())
-
-    def set_text(self, text: str):
+    # ------------------------------------------------------------------#
+    #                  Public helpers                                   #
+    # ------------------------------------------------------------------#
+    def set_text(self, text: str) -> None:
+        """Change message text and update size."""
         self.text_label.setText(text)
         self.adjustSize()

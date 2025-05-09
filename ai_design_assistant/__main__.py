@@ -41,6 +41,11 @@ def main() -> None:
     QCoreApplication.setOrganizationName("AI Design Assistant")
     app = QApplication(sys.argv)
 
+    themes_dir = Path(__file__).with_suffix("").parent / "resources" / "themes"
+    style = (themes_dir / "dark.qss").read_text()  # или dark.qss
+    style += (themes_dir / "chat.qss").read_text()
+    app.setStyleSheet(style)
+
     # 4️⃣  Main UI
     window = MainWindow()
     window.show()

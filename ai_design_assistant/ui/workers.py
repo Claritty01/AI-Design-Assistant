@@ -31,6 +31,5 @@ class GenerateThread(QThread):
             # Используем метод stream() из backend'а
             for token in self.router.stream(self.messages):
                 self.token_received.emit(token)  # Отправляем каждый токен
-            self.finished.emit("Stream completed")
         except Exception as e:
             self.error.emit(str(e))
