@@ -52,15 +52,9 @@ class Message:
 @dataclass
 class ChatSession:
     """Container for chat messages and file persistence."""
-    def __init__(self):
-        self.uuid = str(uuid.uuid4())  # Генерация уникального идентификатора
-        self.messages = []
-
     title: str = _DEFAULT_TITLE
     messages: list[Message] = field(default_factory=list)
     uuid: str = field(default_factory=lambda: uuid.uuid4().hex)
-
-    # path is assigned on first save / load
     _path: Path | None = field(default=None, init=False, repr=False, compare=False)
 
     # ------------------------------------------------------------------
@@ -78,6 +72,20 @@ class ChatSession:
     # ------------------------------------------------------------------
     # Persistence helpers
     # ------------------------------------------------------------------
+    @classmethod
+    def load_all(cls) -> list[ChatSession]:
+        root = cls._chats_root()
+        sessions = []
+        for folder in sorted(root.iterdir()):
+            if folder.is_dir():
+                json_file = folder / f"{folder.name}.json"
+                if json_file.exists():
+                    try:
+                        sessions.append(cls.load(json_file))
+                    except Exception as e:
+                        logger.warning("Ошибка загрузки чата %s: %s", json_file, e)
+        return sessions
+
     @classmethod
     def _chats_root(cls) -> Path:
         root = get_chats_directory()

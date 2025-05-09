@@ -12,7 +12,7 @@ If *realesrgan-ncnn-vulkan* is unavailable, PIL resize fallback is used.
 
 import subprocess
 from pathlib import Path
-
+import base64
 from PIL import Image
 from rembg import remove  # type: ignore
 
@@ -20,6 +20,14 @@ from ai_design_assistant.core.logger import get_logger
 
 log = get_logger("modules")
 
+
+def image_to_base64(path: Path) -> str:
+    ext = path.suffix.lower().lstrip(".")
+    if ext == "jpg":
+        ext = "jpeg"
+    mime = f"image/{ext}"
+    encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+    return f"data:{mime};base64,{encoded}"
 
 # ────────────────────────────────────────────────────────────
 # 🔼 UPSCALE
@@ -103,3 +111,4 @@ def remove_background(image_path: str | Path, *, out_dir: str | Path | None = No
 
     log.info("Removed background %s → %s", src, dst)
     return str(dst)
+

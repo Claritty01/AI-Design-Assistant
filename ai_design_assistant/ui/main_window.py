@@ -129,6 +129,7 @@ class MainWindow(QMainWindow):
         self.current: Optional[ChatSession] = None
 
         self._build_ui()
+        self._load_chats()
         self._new_chat()  # initial session
 
     # ------------------------------------------------------------------#
@@ -269,6 +270,13 @@ class MainWindow(QMainWindow):
 
     def _on_attachment(self, path: Path) -> None:
         self._on_user_text(f"[Image] {path.name}")
+
+    def _load_chats(self) -> None:
+        for session in ChatSession.load_all():
+            self.sessions.append(session)
+            item = QListWidgetItem("Chat " + session.uuid[:6])
+            item.setData(Qt.ItemDataRole.UserRole, session)
+            self.chat_list.addItem(item)
 
 
 # ────────────────────────────────────────────────
