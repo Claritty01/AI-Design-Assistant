@@ -36,9 +36,26 @@ JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
 DOTENV_PATH: Final = _BASE_DIR / ".env"          # secrets
 load_dotenv(dotenv_path=DOTENV_PATH, override=False)   # не падаем, если .env нет
 
+
+_SETTINGS_FILE = Path("data/settings.json")
+def get_chats_directory() -> Path:
+    if not _SETTINGS_FILE.exists():
+        return Path("data/chats").resolve()  # Абсолютный путь по умолчанию
+
+    with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
+        settings = json.load(f)
+    chats_path = settings.get("chats_path", "data/chats")
+
+    # Если путь относительный, приведите его к абсолютному
+    if not Path(chats_path).is_absolute():
+        return (Path(__file__).parent.parent / chats_path).resolve()
+    else:
+        return Path(chats_path).resolve()
+
 # ---------------------------------------------------------------------------#
 #  Dataclass                                                                  #
 # ---------------------------------------------------------------------------#
+
 @dataclass
 class Settings:
     # ========= General ========= #

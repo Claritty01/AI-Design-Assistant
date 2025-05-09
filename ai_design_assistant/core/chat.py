@@ -10,15 +10,19 @@ Core responsibilities
 No PyQt imports allowed — UI layer will observe / mutate via public API.
 """
 from __future__ import annotations
-
+from ai_design_assistant.core.settings import get_chats_directory  # ← Добавить
 import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final, Iterable, Self
+import logging
 
 from platformdirs import user_data_dir
+
+import logging
+logger = logging.getLogger(__name__)  # ← Добавить
 
 _APP_NAME: Final = "AI Design Assistant"
 _CHAT_DIRNAME: Final = "chats"
@@ -32,12 +36,12 @@ _DEFAULT_TITLE: Final = "Untitled chat"
 @dataclass(slots=True)
 class Message:
     """Single chat turn."""
-
     role: str  # "user" | "assistant" | "system"
     content: str
+    image: str | None = None  # Путь к изображению
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
-    def as_dict(self) -> dict[str, str]:  # helper for json dump
+    def as_dict(self) -> dict[str, str]:
         return asdict(self)
 
 
@@ -71,14 +75,18 @@ class ChatSession:
     # ------------------------------------------------------------------
     @classmethod
     def _chats_root(cls) -> Path:
-        root = Path(user_data_dir(_APP_NAME)) / _CHAT_DIRNAME
+        root = get_chats_directory()
         root.mkdir(parents=True, exist_ok=True)
-        return root
+        return root  # Убрано добавление _CHAT_DIRNAME
 
     @classmethod
     def _generate_filename(cls) -> Path:
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        return cls._chats_root() / f"chat_{ts}.json"
+        chat_uuid = uuid.uuid4().hex
+        chat_dir = cls._chats_root() / f"chat_{chat_uuid}"
+        chat_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Creating chat directory: {chat_dir}")
+        return chat_dir / "chat.json"
 
     @classmethod
     def load(cls, path: str | Path) -> "ChatSession":
@@ -91,11 +99,21 @@ class ChatSession:
             uuid=data.get("uuid", uuid.uuid4().hex),
         )
         session._path = p
+
+        # Проверка изображений
+        for msg in session.messages:
+            if msg.image:
+                img_path = (p.parent / msg.image).resolve()
+                if not img_path.exists():
+                    logger.warning(f"Image missing: {img_path}")
+                    msg.image = None
         return session
 
     def save(self) -> Path:
         if self._path is None:
             self._path = self._generate_filename()
+
+        logger.info(f"Saving chat to: {self._path}")
         payload = {
             "title": self.title,
             "uuid": self.uuid,
@@ -108,12 +126,18 @@ class ChatSession:
     @classmethod
     def purge_old(cls, days: int = 30) -> None:
         cutoff = datetime.now().timestamp() - days * 86400
-        for file in cls._chats_root().glob("chat_*.json"):
-            if file.stat().st_mtime < cutoff:
-                try:
-                    file.unlink()
-                except OSError:
-                    pass
+        root = cls._chats_root()
+
+        for chat_dir in root.glob("chat_*"):
+            if chat_dir.is_dir():
+                json_file = chat_dir / "chat.json"
+                if json_file.exists() and json_file.stat().st_mtime < cutoff:
+                    try:
+                        for file in chat_dir.iterdir():
+                            file.unlink()
+                        chat_dir.rmdir()
+                    except Exception as e:
+                        logger.error(f"Failed to delete {chat_dir}: {e}")
 
     # ------------------------------------------------------------------
     # Representation helpers
@@ -123,3 +147,20 @@ class ChatSession:
             return "(empty)"
         last = self.messages[-1].content.replace("\n", " ")
         return last[:max_len] + ("…" if len(last) > max_len else "")
+
+    def add_image_message(self, role: str, content: str, image_path: str) -> Message:
+        from shutil import copy2
+
+        # Генерация имени файла изображения
+        image_name = f"image_{len(self.messages) + 1}{Path(image_path).suffix}"
+        target_path = self._path.parent / image_name  # путь внутри папки чата
+        copy2(image_path, target_path)
+
+        # Сохраняем относительный путь в сообщении
+        msg = Message(
+            role=role,
+            content=content,
+            image=str(target_path.relative_to(self._chats_root()))
+        )
+        self.messages.append(msg)
+        return msg
