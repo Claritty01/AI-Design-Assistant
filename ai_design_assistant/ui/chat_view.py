@@ -34,8 +34,8 @@ class ChatView(QWidget):
         main_layout.addWidget(self.scroll_area)
         self.setLayout(main_layout)
 
-    def add_message(self, text: str, is_user: bool):
-        bubble = MessageBubble(text, is_user, parent=self.message_container)
+    def add_message(self, text: str, is_user: bool, avatar_path: str | None = None):
+        bubble = MessageBubble(text, "user" if is_user else "assistant", avatar_path)
         self.message_layout.addWidget(bubble)
         self.scroll_area.ensureWidgetVisible(bubble)
 
