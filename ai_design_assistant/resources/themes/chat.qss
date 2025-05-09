@@ -1,0 +1,10 @@
+/* Пользователь */
+QWidget#user_bubble {
+    background: #DCF8C6;
+    color: #333;
+}
+/* Ассистент */
+QWidget#assistant_bubble {
+    background: #F0F0F0;
+    color: #000;
+}

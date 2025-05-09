@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent, QThread
-from PyQt6.QtGui import QAction, QIcon, QKeyEvent
+from PyQt6.QtGui import QAction, QIcon, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStyle,
     QTabWidget,
@@ -28,10 +29,12 @@ from PyQt6.QtWidgets import (
 # ────────────────────────────────────────────────
 #  internal imports ― пути поправлены
 # ────────────────────────────────────────────────
-from ai_design_assistant.core.chat import ChatSession, Message           # ⬅️ renamed
-from ai_design_assistant.core.models import LLMRouter                    # ⬅️ moved
+from ai_design_assistant.core.chat import ChatSession, Message  # ⬅️ renamed
+from ai_design_assistant.core.models import LLMRouter  # ⬅️ moved
 from ai_design_assistant.ui.chat_view import ChatView
 from ai_design_assistant.ui.workers import GenerateThread
+
+from ai_design_assistant.ui.widgets import MessageBubble
 
 ASSETS = Path(__file__).with_suffix("").parent.parent / "assets" / "icons"
 
@@ -45,11 +48,12 @@ class EnterTextEdit(QTextEdit):
 
     def keyPressEvent(self, ev: QKeyEvent) -> None:
         if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
-            ev.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                ev.modifiers() & Qt.KeyboardModifier.ShiftModifier
         ):
             self.sendRequested.emit()
-            return                          # откусываем перевод строки
+            return  # откусываем перевод строки
         super().keyPressEvent(ev)
+
 
 
 class InputBar(QWidget):
@@ -119,7 +123,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._create_menu()
-        self._new_chat()                         # стартовая сессия
+        self._new_chat()  # стартовая сессия
 
     # ――― UI каркас ――― #
     def _build_ui(self) -> None:
@@ -189,25 +193,42 @@ class MainWindow(QMainWindow):
 
     # ――― sending / receiving ――― #
     def _on_user_text(self, text: str) -> None:
-        if not self.current:
-            return
-        msg = Message(role="user", content=text)
-        self.current.messages.append(msg)
-        self.chat_view.add_message(text, is_user=True)
+        try:
+            if not self.current:
+                return
+            msg = Message(role="user", content=text)
+            self.current.messages.append(msg)
+            self.chat_view.add_message(text, is_user=True)
 
-        # не запускаем второй поток, пока первый не закончился
-        if any(t.isRunning() for t in self._threads):
-            QMessageBox.warning(self, "Подождите", "Модель ещё отвечает.")
-            return
+            if any(t.isRunning() for t in self._threads):
+                QMessageBox.warning(self, "Подождите", "Модель ещё отвечает.")
+                return
 
-        worker = GenerateThread(self.router, list(self.current.messages))
-        worker.finished.connect(self._on_llm_reply)
-        worker.error.connect(self._on_llm_error)
-        # когда поток отработал — удаляем из списка и аккуратно уничтожаем
-        worker.finished.connect(lambda: self._cleanup_thread(worker))
-        worker.error.connect(lambda _: self._cleanup_thread(worker))
-        worker.start()
-        self._threads.append(worker)
+            worker = GenerateThread(self.router, list(self.current.messages))
+            worker.finished.connect(self._on_llm_reply)
+            worker.error.connect(self._on_llm_error)
+            worker.finished.connect(lambda: self._cleanup_thread(worker))
+            worker.error.connect(lambda _: self._cleanup_thread(worker))
+            worker.start()
+            self._threads.append(worker)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Ошибка",
+                f"Ошибка при отправке сообщения: {e}"
+            )
+            raise  # Перебросить исключение для отладки
+
+    def _on_llm_reply(self, reply: str) -> None:
+        try:
+            if not self.current:
+                return
+            self.current.messages.append(Message(role="assistant", content=reply))
+            self.chat_view.add_message(reply, is_user=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при получении ответа: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _cleanup_thread(self, thread: QThread) -> None:
         try:
@@ -227,8 +248,6 @@ class MainWindow(QMainWindow):
 
     def _on_llm_error(self, err: str) -> None:
         QMessageBox.critical(self, "LLM error", err)
-
-
 
 
 # ────────────────────────────────────────────────
