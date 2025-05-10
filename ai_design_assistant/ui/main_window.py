@@ -60,11 +60,12 @@ class EnterTextEdit(QTextEdit):
 
 
 class InputBar(QWidget):
-    sendClicked = pyqtSignal(str)
+    sendClicked = pyqtSignal(tuple)
     imageAttached = pyqtSignal(Path)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:  # noqa: D401
         super().__init__(parent)
+        self.attached_image: Optional[Path] = None
         self._build_ui()
 
     # ------------------------------------------------------------------#
@@ -94,14 +95,25 @@ class InputBar(QWidget):
         lay.addWidget(self.text_edit, 1)
         lay.addWidget(send_btn)
 
+        self.image_label = QLabel(self)
+        self.image_label.setText("")  # Пусто, пока нет изображения
+        self.image_label.setStyleSheet("color: #aaa; font-style: italic; font-size: 12px;")
+
+        layout = QVBoxLayout()
+        layout.addLayout(lay)
+        layout.addWidget(self.image_label)
+
+
     # ------------------------------------------------------------------#
     # slots
     # ------------------------------------------------------------------#
     def _emit_send(self) -> None:
         text = self.text_edit.toPlainText().strip()
-        if text:
+        if text or self.attached_image:
             self.text_edit.clear()
-            self.sendClicked.emit(text)
+            self.sendClicked.emit((text, self.attached_image))
+            self.attached_image = None  # сбрасываем после отправки
+            self.image_label.setText("")
 
     def _attach_image(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -111,7 +123,8 @@ class InputBar(QWidget):
             "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
         )
         if file_path:
-            self.imageAttached.emit(Path(file_path))
+            self.attached_image = Path(file_path)
+            self.image_label.setText(f"📎 {Path(file_path).name} attached")
 
 
 # ╭──────────────────────────────────────────────╮
@@ -160,7 +173,7 @@ class MainWindow(QMainWindow):
         c_lay = QVBoxLayout(center)
         self.chat_view = ChatView(self)
         self.input_bar = InputBar(self)
-        self.input_bar.sendClicked.connect(self._on_user_text)
+        self.input_bar.sendClicked.connect(self._on_user_message)
         self.input_bar.imageAttached.connect(self._on_attachment)
         c_lay.addWidget(self.chat_view, 1)
         c_lay.addWidget(self.input_bar)
@@ -213,35 +226,21 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------#
     # Sending / receiving
     # ------------------------------------------------------------------#
-    def _on_user_text(self, text: str) -> None:  # noqa: C901 – verbose but straightforward
+    def _on_user_message(self, payload: tuple[str, Optional[Path]]) -> None:
         if not self.current:
             return
 
-        # Проверяем: это путь к файлу?
-        if text.startswith("file://"):
-            url = urlparse(text)
-            path = unquote(url.path)
-
-            # Убираем ведущий слэш под Windows
-            if sys.platform.startswith("win") and path.startswith("/"):
-                path = path[1:]
-
-            if Path(path).exists():
-                return self._on_attachment(Path(path))
-
-        # append user message
-        user_msg = Message(role="user", content=text)
-        self.current.messages.append(user_msg)
+        text, image_path = payload
+        msg = Message(role="user", content=text, image=str(image_path) if image_path else None)
+        self.current.messages.append(msg)
         self.current.save()
-        self.chat_view.add_message(text, is_user=True, image=None)
-
+        self.chat_view.add_message(text, is_user=True, image=str(image_path) if image_path else None)
 
         # guard: only one generation at a time
         if any(t.isRunning() for t in self._threads):
             QMessageBox.warning(self, "Wait", "The model is still responding…")
             return
 
-        # create empty assistant bubble for streaming
         assistant_bubble = self.chat_view.add_message("", is_user=False)
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 

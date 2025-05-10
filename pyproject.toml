@@ -27,7 +27,7 @@ PyQt6-WebEngine  = "^6.7"
 
 # Image / plugins
 rembg            = "^2.0"
-onnxruntime      = "^1.18"
+onnxruntime      = "1.20.0"
 opencv-python    = "^4.11"
 pillow           = "^11.2"
 numpy            = "^2.2"
