@@ -208,7 +208,7 @@ class MainWindow(QMainWindow):
         self.current = session
         self.chat_view.clear()
         for m in session.messages:
-            self.chat_view.add_message(m.content, is_user=(m.role == "user"))
+            self.chat_view.add_message(m.content, is_user=(m.role == "user"), image=m.image)
 
     # ------------------------------------------------------------------#
     # Sending / receiving
@@ -233,7 +233,8 @@ class MainWindow(QMainWindow):
         user_msg = Message(role="user", content=text)
         self.current.messages.append(user_msg)
         self.current.save()
-        self.chat_view.add_message(text, is_user=True)
+        self.chat_view.add_message(text, is_user=True, image=None)
+
 
         # guard: only one generation at a time
         if any(t.isRunning() for t in self._threads):
@@ -292,7 +293,8 @@ class MainWindow(QMainWindow):
         self.current.save()
 
         # 2. Добавляем в UI
-        self.chat_view.add_message(f"[Image] {path.name}", is_user=True)
+        self.chat_view.add_message(f"[Image] {path.name}", is_user=True, image=str(path))
+
 
         # 3. Запускаем генерацию
         if any(t.isRunning() for t in self._threads):
