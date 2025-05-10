@@ -38,23 +38,9 @@ class ChatView(QWidget):
         self.setLayout(main_layout)
 
     def add_message(self, text: str, is_user: bool, image: Optional[str] = None) -> MessageBubble:
-        bubble = MessageBubble(text, is_user, parent=self.message_container)
+        bubble = MessageBubble(text, is_user, image=image, parent=self.message_container)
+
         self.message_layout.addWidget(bubble)
-
-        # --- если есть изображение, добавим превью ---
-        if image:
-            from PyQt6.QtGui import QPixmap
-            from PyQt6.QtCore import QSize
-
-            pixmap = QPixmap(image)
-            if not pixmap.isNull():
-                preview = QLabel()
-                preview.setPixmap(pixmap.scaled(
-                    QSize(256, 256),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation
-                ))
-                self.message_layout.addWidget(preview)
 
         self.scroll_to_bottom()
         return bubble

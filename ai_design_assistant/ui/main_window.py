@@ -258,14 +258,14 @@ class MainWindow(QMainWindow):
         """Stream token-by-token into assistant bubble."""
         if not self.current or not hasattr(self.current, "assistant_bubble"):
             return
-        lbl = self.current.assistant_bubble.text_label  # type: ignore[attr-defined]
+        lbl = self.current.assistant_bubble.label
         lbl.setText(lbl.text() + token)
         self.chat_view.scroll_to_bottom()
 
     def _on_llm_reply(self, _: str) -> None:
         if not self.current or not hasattr(self.current, "assistant_bubble"):
             return
-        final_text = self.current.assistant_bubble.text_label.text()  # type: ignore[attr-defined]
+        final_text = self.current.assistant_bubble.label.text()
         self.current.messages.append(Message(role="assistant", content=final_text))
         self.current.save()
         delattr(self.current, "assistant_bubble")
@@ -288,12 +288,16 @@ class MainWindow(QMainWindow):
             return
 
             # 1. Добавляем сообщение с изображением
-        msg = Message(role="user", content=f"[Image] {path.name}", image=str(path))
+        text = self.input_bar.text_edit.toPlainText().strip()
+        msg = Message(role="user", content=text, image=str(path))
+        self.input_bar.text_edit.clear()
+
         self.current.messages.append(msg)
         self.current.save()
 
         # 2. Добавляем в UI
-        self.chat_view.add_message(f"[Image] {path.name}", is_user=True, image=str(path))
+        self.chat_view.add_message(text, is_user=True, image=str(path))
+
 
 
         # 3. Запускаем генерацию

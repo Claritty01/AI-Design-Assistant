@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import List, Optional
 
-from PyQt6.QtCore import Qt, QEvent, QTimer
+from PyQt6.QtCore import Qt, QEvent, QTimer, QSize
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -13,30 +14,63 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QWidget,
-    QSizePolicy,
+    QSizePolicy
 )
 
 ICONS_DIR = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
 
 
 class MessageBubble(QWidget):
-    """Single chat message bubble.
-
-    Parameters
-    ----------
-    text
-        Message text.
-    is_user
-        ``True`` – message was sent by user, ``False`` – by assistant.
-    parent
-        Optional Qt parent.
-    """
-
-    def __init__(self, text: str, is_user: bool, parent: QWidget | None = None) -> None:
+    def __init__(self, text: str, is_user: bool, image: Optional[str] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
+        self.is_user = is_user
+        self.setProperty("bubbleRole", "user" if is_user else "assistant")
 
-        self.role = "user" if is_user else "assistant"
-        self._init_ui(text)
+        # Внешний layout: горизонтальный
+        outer_layout = QHBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(8)
+
+        # Иконка
+        icon_label = QLabel()
+        icon_path = Path(__file__).parent.parent / "resources" / "icons" / ("user.png" if is_user else "ai.png")
+        if icon_path.exists():
+            pix = QPixmap(str(icon_path)).scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio,
+                                                 Qt.TransformationMode.SmoothTransformation)
+            icon_label.setPixmap(pix)
+
+        # Контентный layout (текст + изображение)
+        content_wrapper = QWidget()
+        content_layout = QVBoxLayout(content_wrapper)
+        content_layout.setContentsMargins(12, 8, 12, 8)
+        content_layout.setSpacing(6)
+
+        if image and Path(image).exists():
+            pixmap = QPixmap(image)
+            if not pixmap.isNull():
+                img_label = QLabel()
+                img_label.setPixmap(pixmap.scaled(
+                    QSize(256, 256), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+                ))
+                content_layout.addWidget(img_label)
+
+        self.label = QLabel(text)
+        self.label.setStyleSheet("background: transparent; font-size: 14px;")
+        self.label.setWordWrap(True)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        content_layout.addWidget(self.label)
+
+        content_wrapper.setProperty("bubbleRole", "user" if is_user else "assistant")  # <-- фон на обёртке
+        content_wrapper.setStyleSheet("")  # пусть применяется из QSS
+
+        if is_user:
+            outer_layout.addStretch()
+            outer_layout.addWidget(content_wrapper)
+            outer_layout.addWidget(icon_label)
+        else:
+            outer_layout.addWidget(icon_label)
+            outer_layout.addWidget(content_wrapper)
+            outer_layout.addStretch()
 
     # ---------------------------------------------------------------------#
     #                               UI                                     #
