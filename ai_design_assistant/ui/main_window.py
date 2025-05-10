@@ -41,6 +41,7 @@ from ai_design_assistant.ui.workers import GenerateThread
 from ai_design_assistant.ui.gallery_panel import GalleryPanel
 from ai_design_assistant.core.settings import get_chats_directory
 
+
 ASSETS = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
 USER_ICON = ASSETS / "user.png"
 AI_ICON = ASSETS / "ai.png"
@@ -214,7 +215,7 @@ class MainWindow(QMainWindow):
     def _get_current_chat_folder(self) -> str:
         if not self.current:
             return ""
-        return str(get_chats_directory() / f"chat_{self.current.uuid}")
+        return str(self.current._path.parent)
 
     def _on_gallery_image_selected(self, path: str) -> None:
         print(f"Выбрано изображение в галерее: {path}")
@@ -233,7 +234,7 @@ class MainWindow(QMainWindow):
     # Chat-session helpers
     # ------------------------------------------------------------------#
     def _new_chat(self) -> None:
-        session = ChatSession()
+        session = ChatSession.create_new()
         self.sessions.append(session)
 
         item = QListWidgetItem("Chat " + session.uuid[:6])
@@ -246,12 +247,18 @@ class MainWindow(QMainWindow):
     def _switch_chat(self, item: QListWidgetItem) -> None:
         session = item.data(Qt.ItemDataRole.UserRole)
         self._activate_session(session)
+        self.gallery_panel.refresh()
 
     def _activate_session(self, session: ChatSession) -> None:
         self.current = session
         self.chat_view.clear()
+        chat_folder = session._path.parent
+
         for m in session.messages:
-            self.chat_view.add_message(m.content, is_user=(m.role == "user"), image=m.image)
+            img = str(chat_folder / m.image) if m.image else None
+            self.chat_view.add_message(m.content, is_user=(m.role == "user"), image=img)
+
+        self.gallery_panel.refresh()  # 💡 Обновим и галерею здесь же
 
     # ------------------------------------------------------------------#
     # Sending / receiving
@@ -261,21 +268,13 @@ class MainWindow(QMainWindow):
             return
 
         text, image_path = payload
-        msg = Message(role="user", content=text, image=str(image_path) if image_path else None)
-        self.current.messages.append(msg)
-        self.current.save()
+        if image_path:
+            msg = self.current.add_image_message(role="user", content=text, image_path=image_path)
+        else:
+            msg = self.current.add_message(role="user", content=text)
         self.chat_view.add_message(text, is_user=True, image=str(image_path) if image_path else None)
         self.gallery_panel.refresh()
 
-        # Копируем изображение в chat_N/images
-        if image_path:
-            image_folder = Path(self._get_current_chat_folder()) / "images"
-            image_folder.mkdir(parents=True, exist_ok=True)
-
-            index = len(list(image_folder.glob("*.png"))) + 1
-            target = image_folder / f"image_{index}{image_path.suffix.lower()}"
-            shutil.copy(image_path, target)
-            image_path = target  # заменяем путь на новый
         # guard: only one generation at a time
         if any(t.isRunning() for t in self._threads):
             QMessageBox.warning(self, "Wait", "The model is still responding…")
@@ -285,7 +284,8 @@ class MainWindow(QMainWindow):
         self.gallery_panel.refresh()
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
-        worker = GenerateThread(self.router, list(self.current.messages))
+        worker = GenerateThread(self.router, list(self.current.messages), self.current._path.parent)
+
         worker.token_received.connect(self._on_token_received)
         worker.finished.connect(self._on_llm_reply)
         worker.error.connect(self._on_llm_error)

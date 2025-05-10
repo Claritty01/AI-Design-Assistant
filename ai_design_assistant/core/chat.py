@@ -50,19 +50,38 @@ class ChatSession:
     def add_image_message(self, role: str, content: str, image_path: str) -> Message:
         from shutil import copy2
 
-        image_name = f"image_{len(self.messages) + 1}{Path(image_path).suffix}"
         assert self._path is not None, "Chat path not initialized"
-        target_path = self._path.parent / image_name
-        copy2(image_path, target_path)
 
-        relative_path = target_path.relative_to(self._chats_root())
-        msg = Message(role=role, content=content, image=str(relative_path))
+        # 1. Создаём папку `images/`, если нет
+        images_dir = self._path.parent / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        # 2. Генерируем имя и копируем изображение
+        ext = Path(image_path).suffix or ".png"
+        image_name = f"image_{len(self.messages) + 1}{ext}"
+        new_path = images_dir / image_name
+        copy2(image_path, new_path)
+
+        # 3. Относительный путь внутри чата
+        relative_path = Path("images") / image_name
+
+        msg = Message(
+            role=role,
+            content=content,
+            image=str(relative_path)  # например: "images/image_3.png"
+        )
         self.messages.append(msg)
         self.save()
         return msg
 
     def __iter__(self) -> Iterable[Message]:
         return iter(self.messages)
+
+    @classmethod
+    def create_new(cls) -> ChatSession:
+        session = cls()
+        session._path = cls._generate_filename()
+        return session
 
     # ──────────────── File ops ────────────────
 
@@ -88,7 +107,8 @@ class ChatSession:
         )
 
     def save(self) -> Path:
-        if self._path is None:
+        if self._path is None or not self._path.name.startswith("chat_"):
+            logger.warning(f"Generating new path. Old _path: {self._path}")
             self._path = self._generate_filename()
         payload = self.to_dict()
         self._path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -22,17 +22,20 @@ class GenerateThread(QThread):
     finished = pyqtSignal(str)        # Сигнал для завершения
     error = pyqtSignal(str)
 
-    def __init__(self, router: LLMRouter, messages: list):
+    def __init__(self, router: LLMRouter, messages: list, chat_path: Path):
         super().__init__()
         self.router = router
         self.messages = messages
+        self.chat_path = chat_path
 
     def run(self):
         try:
             prepared_messages = []
             for msg in self.messages:
                 if getattr(msg, "image", None):
-                    base64_data = image_to_base64(Path(msg.image))
+                    image_path = self.chat_path / msg.image  # images/image_X.png → data/chats/chat_N/images/image_X.png
+                    base64_data = image_to_base64(image_path)
+
                     prepared_messages.append({
                         "role": msg.role,
                         "content": [

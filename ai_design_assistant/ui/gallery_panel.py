@@ -24,7 +24,7 @@ class GalleryPanel(QWidget):
 
     def refresh(self):
         self.gallery.clear()
-        folder = Path(self.get_current_chat_folder()) / "images"
+        folder = Path(self.get_current_chat_folder()).resolve() / "images"
         if not folder.exists():
             return
         exts = ('.png', '.jpg', '.jpeg', '.bmp')
