@@ -37,6 +37,7 @@ from ai_design_assistant.ui.chat_view import ChatView
 from ai_design_assistant.ui.settings_dialog import SettingsDialog
 from ai_design_assistant.ui.theme_utils import load_stylesheet
 from ai_design_assistant.ui.workers import GenerateThread
+from ai_design_assistant.ui.gallery_panel import GalleryPanel
 
 ASSETS = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
 USER_ICON = ASSETS / "user.png"
@@ -205,6 +206,16 @@ class MainWindow(QMainWindow):
         splitter.addWidget(center)
         splitter.addWidget(right)
         splitter.setSizes([220, 700, 280])
+        self.gallery_panel = GalleryPanel(self._get_current_chat_folder, self._on_gallery_image_selected)
+        right.addTab(self.gallery_panel, "Gallery")
+
+    def _get_current_chat_folder(self) -> str:
+        if not self.current:
+            return ""
+        return str(Path("data/chats") / f"chat_{self.current.uuid}")
+
+    def _on_gallery_image_selected(self, path: str) -> None:
+        print(f"Выбрано изображение в галерее: {path}")
 
     # ------------------------------------------------------------------#
     # Settings dialog helper
