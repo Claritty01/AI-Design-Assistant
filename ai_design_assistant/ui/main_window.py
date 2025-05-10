@@ -24,6 +24,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from urllib.parse import urlparse, unquote
+
 # ────────────────────────────────────────────────
 #  internal imports
 # ────────────────────────────────────────────────
@@ -214,6 +216,18 @@ class MainWindow(QMainWindow):
     def _on_user_text(self, text: str) -> None:  # noqa: C901 – verbose but straightforward
         if not self.current:
             return
+
+        # Проверяем: это путь к файлу?
+        if text.startswith("file://"):
+            url = urlparse(text)
+            path = unquote(url.path)
+
+            # Убираем ведущий слэш под Windows
+            if sys.platform.startswith("win") and path.startswith("/"):
+                path = path[1:]
+
+            if Path(path).exists():
+                return self._on_attachment(Path(path))
 
         # append user message
         user_msg = Message(role="user", content=text)

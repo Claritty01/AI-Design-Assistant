@@ -1,13 +1,14 @@
 # ai_design_assistant/ui/chat_view.py
 from PyQt6.QtCore import Qt  # ← главный импорт
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QHBoxLayout, QLabel
-
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from ai_design_assistant.ui.widgets import MessageBubble
 
 
 class ChatView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self._init_ui()
 
     def _init_ui(self):
