@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QIcon, QKeyEvent
+from PyQt6.QtGui import QIcon, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
+    QToolButton,
     QWidget,
 )
 
@@ -60,71 +61,87 @@ class EnterTextEdit(QTextEdit):
 
 
 class InputBar(QWidget):
-    sendClicked = pyqtSignal(tuple)
-    imageAttached = pyqtSignal(Path)
+    sendClicked = pyqtSignal(tuple)  # text + image
+    imageAttached = pyqtSignal(Path)  # (можно удалить, если не используешь)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:  # noqa: D401
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.attached_image: Optional[Path] = None
         self._build_ui()
 
-    # ------------------------------------------------------------------#
     def _build_ui(self) -> None:
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(4, 4, 4, 4)
-        lay.setSpacing(6)
-
         self.text_edit = EnterTextEdit(self)
         self.text_edit.setPlaceholderText("Write a message…")
         self.text_edit.setFixedHeight(70)
         self.text_edit.sendRequested.connect(self._emit_send)
 
-        attach_btn = QPushButton(self)
-        attach_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon))
-        attach_btn.setToolTip("Attach image")
-        attach_btn.clicked.connect(self._attach_image)
+        self.attach_btn = QPushButton("📎", self)
+        self.attach_btn.setFixedWidth(30)
+        self.attach_btn.clicked.connect(self._attach_image)
 
-        send_btn = QPushButton(self)
-        send_btn.setIcon(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowForward)
-        )
-        send_btn.setToolTip("Send")
+        send_btn = QPushButton("📤", self)
+        send_btn.setFixedWidth(30)
         send_btn.clicked.connect(self._emit_send)
 
-        lay.addWidget(attach_btn)
-        lay.addWidget(self.text_edit, 1)
-        lay.addWidget(send_btn)
+        input_row = QHBoxLayout()
+        input_row.setContentsMargins(4, 4, 4, 0)
+        input_row.setSpacing(6)
+        input_row.addWidget(self.attach_btn)
+        input_row.addWidget(self.text_edit, 1)
+        input_row.addWidget(send_btn)
 
-        self.image_label = QLabel(self)
-        self.image_label.setText("")  # Пусто, пока нет изображения
-        self.image_label.setStyleSheet("color: #aaa; font-style: italic; font-size: 12px;")
+        # --- Превью выбранного файла ---
+        self.preview_widget = QWidget(self)
+        preview_layout = QHBoxLayout(self.preview_widget)
+        preview_layout.setContentsMargins(6, 2, 6, 2)
 
-        layout = QVBoxLayout()
-        layout.addLayout(lay)
-        layout.addWidget(self.image_label)
+        self.preview_thumb = QLabel()
+        self.preview_thumb.setFixedSize(48, 48)
 
+        self.preview_name = QLabel()
+        self.preview_name.setStyleSheet("color: #ccc; font-size: 12px;")
 
-    # ------------------------------------------------------------------#
-    # slots
-    # ------------------------------------------------------------------#
+        remove_btn = QToolButton()
+        remove_btn.setText("✖")
+        remove_btn.clicked.connect(self._clear_attachment)
+
+        preview_layout.addWidget(self.preview_thumb)
+        preview_layout.addWidget(self.preview_name, 1)
+        preview_layout.addWidget(remove_btn)
+
+        self.preview_widget.setVisible(False)
+
+        # --- Общий layout ---
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(4, 4, 4, 4)
+        main_layout.addLayout(input_row)
+        main_layout.addWidget(self.preview_widget)
+
     def _emit_send(self) -> None:
         text = self.text_edit.toPlainText().strip()
         if text or self.attached_image:
-            self.text_edit.clear()
             self.sendClicked.emit((text, self.attached_image))
-            self.attached_image = None  # сбрасываем после отправки
-            self.image_label.setText("")
+            self.text_edit.clear()
+            self._clear_attachment()
 
     def _attach_image(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Choose image",
-            str(Path.home()),
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
+            self, "Choose image", str(Path.home()), "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
         )
         if file_path:
             self.attached_image = Path(file_path)
-            self.image_label.setText(f"📎 {Path(file_path).name} attached")
+            pixmap = QPixmap(file_path).scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                                               Qt.TransformationMode.SmoothTransformation)
+            self.preview_thumb.setPixmap(pixmap)
+            self.preview_name.setText(Path(file_path).name)
+            self.preview_widget.setVisible(True)
+
+    def _clear_attachment(self) -> None:
+        self.attached_image = None
+        self.preview_widget.setVisible(False)
+        self.preview_thumb.clear()
+        self.preview_name.setText("")
+
 
 
 # ╭──────────────────────────────────────────────╮
