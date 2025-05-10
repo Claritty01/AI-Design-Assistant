@@ -24,11 +24,11 @@ class GalleryPanel(QWidget):
 
     def refresh(self):
         self.gallery.clear()
-        folder = self.get_current_chat_folder()
-        if not folder or not Path(folder).exists():
+        folder = Path(self.get_current_chat_folder()) / "images"
+        if not folder.exists():
             return
         exts = ('.png', '.jpg', '.jpeg', '.bmp')
-        for path in sorted(Path(folder).glob("*")):
+        for path in sorted(folder.glob("*")):
             if path.suffix.lower() in exts:
                 icon = QIcon(QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio))
                 item = QListWidgetItem(icon, "")

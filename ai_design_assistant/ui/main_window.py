@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -38,6 +39,7 @@ from ai_design_assistant.ui.settings_dialog import SettingsDialog
 from ai_design_assistant.ui.theme_utils import load_stylesheet
 from ai_design_assistant.ui.workers import GenerateThread
 from ai_design_assistant.ui.gallery_panel import GalleryPanel
+from ai_design_assistant.core.settings import get_chats_directory
 
 ASSETS = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
 USER_ICON = ASSETS / "user.png"
@@ -212,7 +214,7 @@ class MainWindow(QMainWindow):
     def _get_current_chat_folder(self) -> str:
         if not self.current:
             return ""
-        return str(Path("data/chats") / f"chat_{self.current.uuid}")
+        return str(get_chats_directory() / f"chat_{self.current.uuid}")
 
     def _on_gallery_image_selected(self, path: str) -> None:
         print(f"Выбрано изображение в галерее: {path}")
@@ -263,13 +265,24 @@ class MainWindow(QMainWindow):
         self.current.messages.append(msg)
         self.current.save()
         self.chat_view.add_message(text, is_user=True, image=str(image_path) if image_path else None)
+        self.gallery_panel.refresh()
 
+        # Копируем изображение в chat_N/images
+        if image_path:
+            image_folder = Path(self._get_current_chat_folder()) / "images"
+            image_folder.mkdir(parents=True, exist_ok=True)
+
+            index = len(list(image_folder.glob("*.png"))) + 1
+            target = image_folder / f"image_{index}{image_path.suffix.lower()}"
+            shutil.copy(image_path, target)
+            image_path = target  # заменяем путь на новый
         # guard: only one generation at a time
         if any(t.isRunning() for t in self._threads):
             QMessageBox.warning(self, "Wait", "The model is still responding…")
             return
 
         assistant_bubble = self.chat_view.add_message("", is_user=False)
+        self.gallery_panel.refresh()
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
         worker = GenerateThread(self.router, list(self.current.messages))
@@ -325,6 +338,7 @@ class MainWindow(QMainWindow):
         # 2. Добавляем в UI
         self.chat_view.add_message(text, is_user=True, image=str(path))
 
+        self.gallery_panel.refresh()
 
 
         # 3. Запускаем генерацию
@@ -333,6 +347,7 @@ class MainWindow(QMainWindow):
             return
 
         assistant_bubble = self.chat_view.add_message("", is_user=False)
+        self.gallery_panel.refresh()
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
         worker = GenerateThread(self.router, list(self.current.messages))
