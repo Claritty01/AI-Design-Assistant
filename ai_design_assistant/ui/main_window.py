@@ -388,6 +388,9 @@ class MainWindow(QMainWindow):
             item.setData(Qt.ItemDataRole.UserRole, session)
             self.chat_list.addItem(item)
 
+    def refresh_gallery(self):
+        self.gallery_panel.refresh()
+
 
 # ────────────────────────────────────────────────
 # Entry-point convenience (dev only)
@@ -407,3 +410,9 @@ def main() -> None:  # pragma: no cover
 
 if __name__ == "__main__":
     main()
+
+
+_MAIN_WINDOW: MainWindow | None = None
+
+def get_main_window() -> MainWindow:
+    return _MAIN_WINDOW

@@ -49,6 +49,8 @@ def main() -> None:
 
     # 6️⃣ Main UI
     window = MainWindow()
+    global _MAIN_WINDOW
+    _MAIN_WINDOW = window
     window.show()
 
     sys.exit(app.exec())

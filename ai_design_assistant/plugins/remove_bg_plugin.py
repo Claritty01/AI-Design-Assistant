@@ -9,6 +9,7 @@ from rembg import remove
 from PIL import Image
 
 from ai_design_assistant.core.plugins import BaseImagePlugin
+from ai_design_assistant.ui.main_window import get_main_window
 
 class RemoveBGPlugin(BaseImagePlugin):
     display_name = "Удаление фона"
@@ -79,6 +80,16 @@ class RemoveBGWidget(QWidget):
         try:
             result_path = self.plugin.run(image_path=str(self.selected_path))
             QMessageBox.information(self, "Готово", f"Фон удалён: {result_path}")
+
+            # ⬇ Обновляем глобальную галерею
+            from ai_design_assistant.ui.main_window import get_main_window
+            main = get_main_window()
+            if main:
+                main.refresh_gallery()
+
+            # ⬇ Обновляем локальную мини-галерею плагина
+            self._refresh_gallery()
+
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка удаления фона: {e}")
 
