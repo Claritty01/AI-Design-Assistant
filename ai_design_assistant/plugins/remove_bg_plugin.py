@@ -1,10 +1,10 @@
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget,
-    QListWidgetItem, QMessageBox
+    QListWidgetItem, QMessageBox, QApplication
 )
 from PyQt6.QtGui import QPixmap, QIcon
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from rembg import remove
 from PIL import Image
 
@@ -24,15 +24,21 @@ class RemoveBGPlugin(BaseImagePlugin):
         return str(dst)
 
     def get_widget(self) -> QWidget:
+        from ai_design_assistant.ui.main_window import get_main_window
+        main = get_main_window()
+        if main and hasattr(main, "gallery_panel"):
+            return RemoveBGWidget(self, gallery_refresh_callback=main.gallery_panel.refresh)
         return RemoveBGWidget(self)
 
 
 class RemoveBGWidget(QWidget):
     THUMB_SIZE = QSize(80, 80)
+    background_removed = pyqtSignal(str)  # путь к новому изображению
 
-    def __init__(self, plugin: RemoveBGPlugin):
+    def __init__(self, plugin: RemoveBGPlugin, gallery_refresh_callback=None):  # ← gallery_refresh_callback здесь
         super().__init__()
         self.plugin = plugin
+        self.gallery_refresh_callback = gallery_refresh_callback
         self.selected_path: Path | None = None
         self.current_folder: Path | None = None
 
@@ -80,15 +86,11 @@ class RemoveBGWidget(QWidget):
         try:
             result_path = self.plugin.run(image_path=str(self.selected_path))
             QMessageBox.information(self, "Готово", f"Фон удалён: {result_path}")
-
-            # ⬇ Обновляем глобальную галерею
-            from ai_design_assistant.ui.main_window import get_main_window
-            main = get_main_window()
-            if main:
-                main.refresh_gallery()
-
-            # ⬇ Обновляем локальную мини-галерею плагина
             self._refresh_gallery()
+            self._highlight_item(Path(result_path))
+
+            if self.gallery_refresh_callback:
+                self.gallery_refresh_callback()
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка удаления фона: {e}")
@@ -109,3 +111,17 @@ class RemoveBGWidget(QWidget):
                 item = QListWidgetItem(icon, "")
                 item.setData(Qt.ItemDataRole.UserRole, str(path))
                 self.gallery.addItem(item)
+
+    def _highlight_item(self, path: Path):
+        """Находит и выделяет элемент галереи по пути и показывает его превью."""
+        for i in range(self.gallery.count()):
+            item = self.gallery.item(i)
+            if Path(item.data(Qt.ItemDataRole.UserRole)) == path:
+                self.gallery.setCurrentItem(item)
+                item.setSelected(True)
+                self.gallery.scrollToItem(item)
+                self._update_preview(path)  # Показываем превью
+                self.selected_path = path
+                self.btn.setEnabled(True)
+                break
+

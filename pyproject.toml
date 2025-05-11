@@ -12,7 +12,7 @@ readme      = "README.md"
 
 # Диапазон Python указываем здесь
 [tool.poetry.dependencies]
-python            = ">=3.10,<3.14"
+python            = ">=3.11,<3.13"
 python-dotenv     = "^1.0"
 platformdirs      = "^4.3"
 openai            = "^1.76"
@@ -34,6 +34,7 @@ numpy            = "^2.2"
 scikit-image     = "^0.25"
 scipy            = "^1.15"
 tqdm             = "^4.67"
+realesrgan = "0.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest        = "^8.2"

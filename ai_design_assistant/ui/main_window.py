@@ -204,6 +204,8 @@ class MainWindow(QMainWindow):
         # ── right sidebar (plugins) ────────────────────────────────────
         right = QTabWidget(self)
         right.setMinimumWidth(260)
+        right.currentChanged.connect(self._on_tab_changed)
+        self._tabs = right
 
         self.gallery_panel = GalleryPanel(self._get_current_chat_folder, self._on_gallery_image_selected)
         right.addTab(self.gallery_panel, "Gallery")
@@ -390,6 +392,11 @@ class MainWindow(QMainWindow):
 
     def refresh_gallery(self):
         self.gallery_panel.refresh()
+
+    def _on_tab_changed(self, index: int) -> None:
+        widget = self._tabs.widget(index)
+        if widget is self.gallery_panel:
+            self.gallery_panel.refresh()
 
 
 # ────────────────────────────────────────────────
