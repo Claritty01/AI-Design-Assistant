@@ -9,9 +9,25 @@ from ai_design_assistant.ui.widgets import MessageBubble
 import re
 
 def markdown_to_html(text: str) -> str:
-    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)  # жирный
-    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)      # курсив
-    text = text.replace("\n", "<br>")                   # переносы строк
+    # Экранируем HTML
+    text = (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+    )
+
+    # Базовое форматирование
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+    text = re.sub(r'__(.+?)__', r'<u>\1</u>', text)
+    text = re.sub(r'~~(.+?)~~', r'<s>\1</s>', text)
+
+    # Списки (начинающиеся с - или * в начале строки)
+    text = re.sub(r'(^|\n)[\-\*]\s+(.*)', r'\1• \2', text)
+
+    # Переносы строк
+    text = text.replace("\n", "<br>")
+
     return text
 
 
