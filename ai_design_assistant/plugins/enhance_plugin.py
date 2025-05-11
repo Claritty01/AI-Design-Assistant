@@ -111,6 +111,9 @@ class EnhanceWidget(QWidget):
             if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
                 self._create_gallery_item(path)
 
+        if self.last_result_path:
+            self._highlight_item(self.last_result_path)
+
     def _on_image_selected(self, item: QListWidgetItem):
         path = Path(item.data(Qt.ItemDataRole.UserRole))
         self.selected_path = path
@@ -143,8 +146,11 @@ class EnhanceWidget(QWidget):
             self.last_result_path = Path(result)  # ⬅ запоминаем
             QMessageBox.information(self, "Готово", f"Изображение сохранено: {result}")
             self._refresh_gallery()
+            self.last_result_path = Path(result)  # запоминаем путь
+
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
+
 
     def _create_gallery_item(self, path: Path) -> QListWidgetItem:
         widget = QWidget()

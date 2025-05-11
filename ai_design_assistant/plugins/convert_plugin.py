@@ -47,6 +47,7 @@ class ConvertWidget(QWidget):
 
         self.gallery = QListWidget()
         self.gallery.setIconSize(self.THUMB_SIZE)
+        self.gallery.setMinimumHeight(350)
         self.gallery.itemClicked.connect(self._on_image_selected)
 
         self.preview = QLabel("Превью")
