@@ -1,35 +1,77 @@
-/* ---------- базовый фон и текст ---------- */
-QWidget           { background:#ffffff; color:#202124; font-size:14px; }
+/* базовый фон и текст */
+QWidget {
+    background: #f5f5f5;
+    color: #202124;
+    font-size: 14px;
+}
 
-/* ---------- приподнятые панели (sidebars, поля ввода, кнопки) ---------- */
+/* приподнятые панели (sidebars) */
 QListWidget,
 QScrollArea,
 QLineEdit,
 QComboBox,
-QPushButton       { background:#f1f3f4; border:1px solid #c6c8ca; }
+QPushButton {
+    background: #ffffff;
+    border: 1px solid #ccc;
+}
 
-/* ---------- выбранные элементы ---------- */
-QListWidget::item:selected { background:#2A6CFF; color:#ffffff; }
+/* выбранные элементы */
+QListWidget::item:selected {
+    background: #3C7DFF;
+    color: #ffffff;
+}
 
-/* ---------- кнопки ---------- */
-QPushButton:hover   { background:#467cff; }
-QPushButton:pressed { background:#2A6CFF; }
+/* кнопка при наведении / нажатии */
+QPushButton:hover {
+    background: #578CFF;
+}
+QPushButton:pressed {
+    background: #3C7DFF;
+}
 
-/* ---------- поле ввода в фокусе / наведение на combo ---------- */
+/* поле ввода в фокусе */
 QLineEdit:focus,
-QComboBox:hover     { border:1px solid #2A6CFF; }
+QComboBox:hover {
+    border: 1px solid #3C7DFF;
+}
 
+/* иконка‑кнопка в пузыре */
+QToolButton {
+    background: transparent;
+    color: #333333;
+    border: none;
+}
+QToolButton:hover {
+    color: #000000;
+}
 
-/* ---------- иконка‑кнопка (копировать) ---------- */
-QToolButton         { background:transparent; color:#5f6368; border:none; }
-QToolButton:hover   { color:#202124; }
+QLabel#assistant_bubble {
+    background: #e6e6e6;
+    color: #333;
+}
+QLabel#user_bubble {
+    background: #2A6CFF;
+    color: #ffffff;
+}
 
-QLabel#assistant_bubble { background:#F5F5F5; color:#222; }
-QLabel#user_bubble      { background:#4E8CFF; color:#fff;  }
+/* пузыри */
+QWidget[bubbleRole="user"] {
+    background: #2A6CFF;
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
 
-/* ---------- пузыри сообщений ---------- */
-QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#ffffff; border-radius:10px; padding:8px 10px; }
-QLabel[bubbleRole="assistant"] { background:#e8eaed; color:#202124; border-radius:10px; padding:8px 10px; }
+QWidget[bubbleRole="user"] QLabel {
+    color: #ffffff; /* принудительно белый текст */
+}
+
+QWidget[bubbleRole="assistant"] {
+    background: #eeeeee;
+    color: #202124;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
 
 /* ───── Tabs (плагины) ───── */
 QTabWidget::pane {
@@ -37,8 +79,8 @@ QTabWidget::pane {
 }
 
 QTabBar::tab {
-    background: #2A2C30;
-    color: #E8EAED;
+    background: #dddddd;
+    color: #202124;
     padding: 6px 12px;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;

@@ -23,6 +23,17 @@ class _OpenAIBackend(ModelBackend):
     # ── one-shot ──────────────────────────────────────────────────────
     def generate(self, messages: List, **kw) -> str:  # noqa: D401
         msgs = normalize(messages)
+
+        # ⬇️ ВСТАВЛЯЕМ system-инструкцию как первый элемент
+        msgs.insert(0, {
+            "role": "system",
+            "content": (
+                "Ты — ИИ-ассистент по графическому дизайну. "
+                "Если получаешь изображение с людьми, игнорируй лица и сосредоточься на UI/UX или на эстетике кадра: "
+                "композиция, кнопки, цвета, читаемость, оформление, экспозиция и так далее. Не обсуждай внешность, даже если она есть."
+            )
+        })
+
         if _IS_NEW:
             resp = openai.chat.completions.create(    # ≥ 1.0
                 model="gpt-4o", messages=msgs, **kw
@@ -37,6 +48,17 @@ class _OpenAIBackend(ModelBackend):
     # ── streaming (yield tokens) ─────────────────────────────────────
     def stream(self, messages: List, **kw) -> Iterator[str]:
         msgs = normalize(messages)
+
+        # ⬇️ ВСТАВЛЯЕМ system-инструкцию как первый элемент
+        msgs.insert(0, {
+            "role": "system",
+            "content": (
+                "Ты — ИИ-ассистент по графическому дизайну. "
+                "Если получаешь изображение с людьми, игнорируй лица и сосредоточься на UI/UX или на эстетике кадра: "
+                "композиция, кнопки, цвета, читаемость, оформление, экспозиция и так далее. Не обсуждай внешность, даже если она есть."
+            )
+        })
+
         if _IS_NEW:
             resp = openai.chat.completions.create(
                 model="gpt-4o", messages=msgs, stream=True, **kw
