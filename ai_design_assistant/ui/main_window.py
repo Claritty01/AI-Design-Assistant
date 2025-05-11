@@ -33,6 +33,7 @@ from urllib.parse import urlparse, unquote
 # ────────────────────────────────────────────────
 from ai_design_assistant.core.chat import ChatSession, Message
 from ai_design_assistant.core.models import LLMRouter
+from ai_design_assistant.core.plugins import get_plugin_manager
 from ai_design_assistant.core.settings import Settings
 from ai_design_assistant.ui.chat_view import ChatView
 from ai_design_assistant.ui.settings_dialog import SettingsDialog
@@ -154,6 +155,7 @@ class InputBar(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:  # noqa: D401
         super().__init__()
+        self.plugin_widgets: dict[str, QWidget] = {}
         self.setWindowTitle("AI Design Assistant")
         self.resize(1400, 780)
 
@@ -212,6 +214,7 @@ class MainWindow(QMainWindow):
             instance = get_plugin_manager().get(plugin.name)
             widget = getattr(instance, "get_widget", lambda: None)()
             if widget:
+                self.plugin_widgets[plugin.name] = widget  # ← сохраняем
                 right.addTab(widget, plugin.display_name)
 
         splitter.addWidget(left)
@@ -227,7 +230,11 @@ class MainWindow(QMainWindow):
         return str(self.current._path.parent)
 
     def _on_gallery_image_selected(self, path: str) -> None:
-        print(f"Выбрано изображение в галерее: {path}")
+        for plugin in get_plugin_manager().metadata().values():
+            instance = get_plugin_manager().get(plugin.name)
+            widget = getattr(instance, "get_widget", lambda: None)()
+            if widget and hasattr(widget, "set_image"):
+                widget.set_image(path)
 
     # ------------------------------------------------------------------#
     # Settings dialog helper
@@ -267,7 +274,13 @@ class MainWindow(QMainWindow):
             img = str(chat_folder / m.image) if m.image else None
             self.chat_view.add_message(m.content, is_user=(m.role == "user"), image=img)
 
-        self.gallery_panel.refresh()  # 💡 Обновим и галерею здесь же
+        self.gallery_panel.refresh()
+
+        # 👇 Вот здесь можно безопасно использовать session
+        chat_folder = str(session._path.parent)
+        for plugin_name, widget in self.plugin_widgets.items():
+            if hasattr(widget, "set_chat_folder"):
+                widget.set_chat_folder(chat_folder)
 
     # ------------------------------------------------------------------#
     # Sending / receiving
