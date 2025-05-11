@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, QSize
 from PIL import Image
 import torch
 from torchvision.transforms.functional import to_tensor, to_pil_image
-
+from datetime import datetime
 
 
 from ai_design_assistant.core.plugins import BaseImagePlugin
@@ -106,13 +106,25 @@ class EnhanceWidget(QWidget):
         if not self.current_folder or not self.current_folder.exists():
             return
 
+        now = datetime.now()
+
         for path in sorted(self.current_folder.glob("*")):
             if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
-                icon = QIcon(QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio))
-                item = QListWidgetItem(icon, "")
+                icon = QIcon(QPixmap(str(path)).scaled(
+                    self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                ))
+
+                # Формируем подпись
+                mtime = datetime.fromtimestamp(path.stat().st_mtime)
+                if mtime.date() == now.date():
+                    subtitle = mtime.strftime("%H:%M")
+                else:
+                    subtitle = mtime.strftime("%d.%m.%Y")
+
+                item = QListWidgetItem(icon, f"{path.name}\n{subtitle}")
                 item.setData(Qt.ItemDataRole.UserRole, str(path))
                 self.gallery.addItem(item)
-
         # 👇 если недавно было сохранено изображение — подсветим его
         if self.last_result_path:
             self._highlight_item(self.last_result_path)

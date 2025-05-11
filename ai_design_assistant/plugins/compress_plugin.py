@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import QSize, Qt
+from datetime import datetime
 from PIL import Image
 
 from ai_design_assistant.core.plugins import BaseImagePlugin
@@ -83,9 +84,20 @@ class CompressWidget(QWidget):
 
         for path in sorted(self.current_folder.glob("*")):
             if path.suffix.lower() in {".png", ".jpg", ".jpeg"}:
-                icon = QIcon(QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio))
+                pixmap = QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
+                                                   Qt.TransformationMode.SmoothTransformation)
+                icon = QIcon(pixmap)
+
                 item = QListWidgetItem(icon, "")
                 item.setData(Qt.ItemDataRole.UserRole, str(path))
+
+                # Название и дата/время
+                name = path.name
+                dt = datetime.fromtimestamp(path.stat().st_mtime)
+                now = datetime.now()
+                date_str = dt.strftime("%H:%M") if dt.date() == now.date() else dt.strftime("%d.%m.%Y")
+
+                item.setText(f"{name}\n{date_str}")
                 self.gallery.addItem(item)
 
     def _on_image_selected(self, item: QListWidgetItem):

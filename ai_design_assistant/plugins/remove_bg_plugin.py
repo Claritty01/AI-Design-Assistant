@@ -7,6 +7,7 @@ from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from rembg import remove
 from PIL import Image
+from datetime import datetime
 
 from ai_design_assistant.core.plugins import BaseImagePlugin
 from ai_design_assistant.ui.main_window import get_main_window
@@ -47,6 +48,7 @@ class RemoveBGWidget(QWidget):
 
         self.gallery = QListWidget()
         self.gallery.setIconSize(self.THUMB_SIZE)
+        self.gallery.setMinimumHeight(350)
         self.gallery.itemClicked.connect(self._on_image_selected)
 
         self.preview = QLabel("Превью")
@@ -107,10 +109,7 @@ class RemoveBGWidget(QWidget):
 
         for path in sorted(self.current_folder.glob("*")):
             if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
-                icon = QIcon(QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio))
-                item = QListWidgetItem(icon, "")
-                item.setData(Qt.ItemDataRole.UserRole, str(path))
-                self.gallery.addItem(item)
+                self._create_gallery_item(path)
 
     def _highlight_item(self, path: Path):
         """Находит и выделяет элемент галереи по пути и показывает его превью."""
@@ -125,3 +124,36 @@ class RemoveBGWidget(QWidget):
                 self.btn.setEnabled(True)
                 break
 
+    def _create_gallery_item(self, path: Path) -> QListWidgetItem:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(4, 0, 4, 0)
+
+        name_label = QLabel(path.name)
+        name_label.setStyleSheet("font-weight: bold;")
+
+        mtime = datetime.fromtimestamp(path.stat().st_mtime)
+        now = datetime.now()
+        subtitle = mtime.strftime("%H:%M") if mtime.date() == now.date() else mtime.strftime("%d.%m.%Y")
+
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setStyleSheet("color: gray; font-size: 10px;")
+
+        layout.addWidget(name_label)
+        layout.addWidget(subtitle_label)
+
+        icon = QIcon(QPixmap(str(path)).scaled(
+            self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ))
+
+        item = QListWidgetItem()
+        item.setSizeHint(widget.sizeHint())
+        item.setSizeHint(QSize(100, 80))
+        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        item.setIcon(icon)
+
+        self.gallery.addItem(item)
+        self.gallery.setItemWidget(item, widget)
+
+        return item
