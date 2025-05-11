@@ -1,7 +1,8 @@
 from pathlib import Path
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QListWidgetItem, \
+    QListWidget
+from PyQt6.QtGui import QPixmap, QIcon
+from PyQt6.QtCore import Qt, QSize
 from PIL import Image
 import torch
 from torchvision.transforms.functional import to_tensor, to_pil_image
@@ -67,17 +68,24 @@ class EnhancePlugin(BaseImagePlugin):
 
 
 class EnhanceWidget(QWidget):
+    THUMB_SIZE = QSize(80, 80)
+
     def __init__(self, plugin: EnhancePlugin):
         super().__init__()
         self.plugin = plugin
-        self.path: Path | None = None
+        self.current_folder: Path | None = None
+        self.selected_path: Path | None = None
+        self.last_result_path: Path | None = None
 
         self.label = QLabel("Выберите изображение для улучшения:")
-        self.preview = QLabel()
-        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.btn_select = QPushButton("📂 Выбрать изображение")
-        self.btn_select.clicked.connect(self._choose_image)
+        self.gallery = QListWidget()
+        self.gallery.setIconSize(self.THUMB_SIZE)
+        self.gallery.itemClicked.connect(self._on_image_selected)
+
+        self.preview = QLabel("Превью")
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.btn_run = QPushButton("🚀 Улучшить")
         self.btn_run.clicked.connect(self._run)
@@ -85,23 +93,63 @@ class EnhanceWidget(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.label)
-        layout.addWidget(self.preview)
-        layout.addWidget(self.btn_select)
+        layout.addWidget(self.gallery)
+        layout.addWidget(self.preview, 1)
         layout.addWidget(self.btn_run)
 
-    def _choose_image(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Выберите изображение", str(Path.home()), "Images (*.png *.jpg *.jpeg)")
-        if file:
-            self.path = Path(file)
-            self.preview.setPixmap(QPixmap(file).scaledToWidth(300, Qt.TransformationMode.SmoothTransformation))
-            self.btn_run.setEnabled(True)
+    def set_chat_folder(self, folder_path: str):
+        self.current_folder = Path(folder_path) / "images"
+        self._refresh_gallery()
+
+    def _refresh_gallery(self):
+        self.gallery.clear()
+        if not self.current_folder or not self.current_folder.exists():
+            return
+
+        for path in sorted(self.current_folder.glob("*")):
+            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+                icon = QIcon(QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio))
+                item = QListWidgetItem(icon, "")
+                item.setData(Qt.ItemDataRole.UserRole, str(path))
+                self.gallery.addItem(item)
+
+        # 👇 если недавно было сохранено изображение — подсветим его
+        if self.last_result_path:
+            self._highlight_item(self.last_result_path)
+
+    def _on_image_selected(self, item: QListWidgetItem):
+        path = Path(item.data(Qt.ItemDataRole.UserRole))
+        self.selected_path = path
+        self._update_preview(path)
+        self.btn_run.setEnabled(True)
+
+    def _update_preview(self, path: Path):
+        pixmap = QPixmap(str(path)).scaledToWidth(240, Qt.TransformationMode.SmoothTransformation)
+        self.preview.setPixmap(pixmap)
+        self.label.setText(f"Выбрано: {path.name}")
+
+    def _highlight_item(self, path: Path):
+        for i in range(self.gallery.count()):
+            item = self.gallery.item(i)
+            if Path(item.data(Qt.ItemDataRole.UserRole)) == path:
+                self.gallery.setCurrentItem(item)
+                item.setSelected(True)
+                self.gallery.scrollToItem(item)
+                self._update_preview(path)
+                self.selected_path = path
+                self.btn_run.setEnabled(True)
+                break
 
     def _run(self):
-        if not self.path:
+        if not self.selected_path:
             QMessageBox.warning(self, "Нет файла", "Сначала выберите изображение.")
             return
         try:
-            result = self.plugin.run(str(self.path))
+            result = self.plugin.run(str(self.selected_path))
+            self.last_result_path = Path(result)  # ⬅ запоминаем
             QMessageBox.information(self, "Готово", f"Изображение сохранено: {result}")
+            self._refresh_gallery()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
+
+
