@@ -30,3 +30,23 @@ QLabel#user_bubble      { background:#4E8CFF; color:#fff;  }
 /* ---------- пузыри сообщений ---------- */
 QLabel[bubbleRole="user"]      { background:#2A6CFF; color:#ffffff; border-radius:10px; padding:8px 10px; }
 QLabel[bubbleRole="assistant"] { background:#e8eaed; color:#202124; border-radius:10px; padding:8px 10px; }
+
+/* ───── Tabs (плагины) ───── */
+QTabWidget::pane {
+    border: none;
+}
+
+QTabBar::tab {
+    background: #2A2C30;
+    color: #E8EAED;
+    padding: 6px 12px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background: #3C7DFF;
+    color: #ffffff;
+    font-weight: bold;
+}

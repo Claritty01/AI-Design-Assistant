@@ -41,3 +41,23 @@ QWidget[bubbleRole="assistant"] {
     border-radius: 10px;
     padding: 8px 10px;
 }
+
+/* ───── Tabs (плагины) ───── */
+QTabWidget::pane {
+    border: none;
+}
+
+QTabBar::tab {
+    background: #2A2C30;
+    color: #E8EAED;
+    padding: 6px 12px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background: #3C7DFF;
+    color: #ffffff;
+    font-weight: bold;
+}
