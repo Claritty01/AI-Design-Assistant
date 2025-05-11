@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:  # noqa: D401
         super().__init__()
         self.setWindowTitle("AI Design Assistant")
-        self.resize(1200, 780)
+        self.resize(1400, 780)
 
         # keep references to active threads to avoid premature GC
         self._threads: list[QThread] = []
@@ -202,15 +202,24 @@ class MainWindow(QMainWindow):
         # ── right sidebar (plugins) ────────────────────────────────────
         right = QTabWidget(self)
         right.setMinimumWidth(260)
-        right.addTab(QLabel("Upscale (todo)"), "Upscale")
-        right.addTab(QLabel("Remove BG (todo)"), "Remove BG")
+
+        self.gallery_panel = GalleryPanel(self._get_current_chat_folder, self._on_gallery_image_selected)
+        right.addTab(self.gallery_panel, "Gallery")
+
+        # ⬇ сначала плагин-вкладки
+        from ai_design_assistant.core.plugins import get_plugin_manager
+        for plugin in get_plugin_manager().metadata().values():
+            instance = get_plugin_manager().get(plugin.name)
+            widget = getattr(instance, "get_widget", lambda: None)()
+            if widget:
+                right.addTab(widget, plugin.display_name)
 
         splitter.addWidget(left)
         splitter.addWidget(center)
         splitter.addWidget(right)
-        splitter.setSizes([220, 700, 280])
-        self.gallery_panel = GalleryPanel(self._get_current_chat_folder, self._on_gallery_image_selected)
-        right.addTab(self.gallery_panel, "Gallery")
+
+        # ⬅ обязательно вернуть splitter.setSizes([...]) если было
+        splitter.setSizes([220, 700, 480])
 
     def _get_current_chat_folder(self) -> str:
         if not self.current:

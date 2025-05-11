@@ -28,6 +28,9 @@ import logging
 import pkgutil
 from typing import Final, Mapping, MutableMapping
 
+from PyQt6.QtWidgets import (
+    QWidget
+)
 
 
 
@@ -54,6 +57,9 @@ class BasePlugin(ABC):
     description: str = "No description"
     #: optional path to icon file (png/svg)
     icon_path: str | None = None
+
+    def get_widget(self) -> QWidget | None:
+        return None
 
     @abstractmethod
     def run(self, **kwargs):  # noqa: D401 (imperative)
