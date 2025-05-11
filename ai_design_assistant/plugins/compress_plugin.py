@@ -48,6 +48,7 @@ class CompressWidget(QWidget):
 
         self.gallery = QListWidget()
         self.gallery.setIconSize(self.THUMB_SIZE)
+        self.gallery.setMinimumHeight(350)
         self.gallery.itemClicked.connect(self._on_image_selected)
 
         self.preview = QLabel("Превью")
@@ -83,22 +84,8 @@ class CompressWidget(QWidget):
             return
 
         for path in sorted(self.current_folder.glob("*")):
-            if path.suffix.lower() in {".png", ".jpg", ".jpeg"}:
-                pixmap = QPixmap(str(path)).scaled(self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
-                                                   Qt.TransformationMode.SmoothTransformation)
-                icon = QIcon(pixmap)
-
-                item = QListWidgetItem(icon, "")
-                item.setData(Qt.ItemDataRole.UserRole, str(path))
-
-                # Название и дата/время
-                name = path.name
-                dt = datetime.fromtimestamp(path.stat().st_mtime)
-                now = datetime.now()
-                date_str = dt.strftime("%H:%M") if dt.date() == now.date() else dt.strftime("%d.%m.%Y")
-
-                item.setText(f"{name}\n{date_str}")
-                self.gallery.addItem(item)
+            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+                self._create_gallery_item(path)
 
     def _on_image_selected(self, item: QListWidgetItem):
         path = Path(item.data(Qt.ItemDataRole.UserRole))
@@ -149,3 +136,37 @@ class CompressWidget(QWidget):
             self._refresh_gallery()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка сжатия: {e}")
+
+    def _create_gallery_item(self, path: Path) -> QListWidgetItem:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(4, 0, 4, 0)
+
+        name_label = QLabel(path.name)
+        name_label.setStyleSheet("font-weight: bold;")
+
+        mtime = datetime.fromtimestamp(path.stat().st_mtime)
+        now = datetime.now()
+        subtitle = mtime.strftime("%H:%M") if mtime.date() == now.date() else mtime.strftime("%d.%m.%Y")
+
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setStyleSheet("color: gray; font-size: 10px;")
+
+        layout.addWidget(name_label)
+        layout.addWidget(subtitle_label)
+
+        icon = QIcon(QPixmap(str(path)).scaled(
+            self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ))
+
+        item = QListWidgetItem()
+        item.setSizeHint(widget.sizeHint())
+        item.setSizeHint(QSize(100, 80))
+        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        item.setIcon(icon)
+
+        self.gallery.addItem(item)
+        self.gallery.setItemWidget(item, widget)
+
+        return item
