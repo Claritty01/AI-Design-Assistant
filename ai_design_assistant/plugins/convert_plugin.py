@@ -84,6 +84,10 @@ class ConvertWidget(QWidget):
             if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
                 self._create_gallery_item(path)
 
+        # ⬇ Подсветим последнее обработанное изображение
+        if self.last_result_path:
+            self._highlight_item(self.last_result_path)
+
     def _on_image_selected(self, item: QListWidgetItem):
         path = Path(item.data(Qt.ItemDataRole.UserRole))
         self._update_preview(path)
@@ -121,6 +125,7 @@ class ConvertWidget(QWidget):
             QMessageBox.critical(self, "Ошибка", str(e))
         if self.gallery_refresh_callback:
             self.gallery_refresh_callback()
+
 
     def _create_gallery_item(self, path: Path) -> QListWidgetItem:
         widget = QWidget()
