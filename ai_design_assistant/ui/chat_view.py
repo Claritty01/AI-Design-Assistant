@@ -6,6 +6,15 @@ from typing import Optional
 
 from ai_design_assistant.ui.widgets import MessageBubble
 
+import re
+
+def markdown_to_html(text: str) -> str:
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)  # жирный
+    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)      # курсив
+    text = text.replace("\n", "<br>")                   # переносы строк
+    return text
+
+
 
 class ChatView(QWidget):
     def __init__(self, parent=None):
@@ -38,7 +47,7 @@ class ChatView(QWidget):
         self.setLayout(main_layout)
 
     def add_message(self, text: str, is_user: bool, image: Optional[str] = None) -> MessageBubble:
-        bubble = MessageBubble(text, is_user, image=image, parent=self.message_container)
+        bubble = MessageBubble(markdown_to_html(text), is_user, image=image, parent=self.message_container)
 
         self.message_layout.addWidget(bubble)
 
