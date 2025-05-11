@@ -22,10 +22,10 @@ class EnhancePlugin(BaseImagePlugin):
         dst = src.with_stem(f"{src.stem}_enhanced").with_suffix(".png")
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        use_half = device.type == "cuda"
 
-        # Загрузка модели
         model = SwinIR(
-            upscale=4,
+            upscale=2,
             in_chans=3,
             img_size=64,
             window_size=8,
@@ -38,22 +38,26 @@ class EnhancePlugin(BaseImagePlugin):
             resi_connection="1conv"
         )
 
-        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth")
+        # веса на 4x
+        # weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth")
+        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
         state_dict = torch.load(weights, map_location=device)
         print("state_dict keys:", list(state_dict.keys()))
 
-        model.load_state_dict(state_dict["params_ema"])
+        if "params" in state_dict:
+            model.load_state_dict(state_dict["params"], strict=True)
+        else:
+            model.load_state_dict(state_dict, strict=True)
 
         model.eval().to(device)
 
-        # Загрузка изображения
         with Image.open(src).convert("RGB") as img:
             lr_tensor = to_tensor(img).unsqueeze(0).to(device)
 
             with torch.no_grad():
                 sr_tensor = model(lr_tensor)
 
-            out_img = to_pil_image(sr_tensor.squeeze(0).clamp(0, 1).cpu())
+            out_img = to_pil_image(sr_tensor.squeeze(0).clamp(0, 1).float().cpu())
             out_img.save(dst)
 
         return str(dst)
