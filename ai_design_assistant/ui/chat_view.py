@@ -97,3 +97,6 @@ class ChatView(QWidget):
     def scroll_to_bottom(self) -> None:
         """Прокручивает чат до последнего сообщения."""
         self.scroll_area.ensureWidgetVisible(self.message_container)
+
+    def message_count(self) -> int:
+        return self.message_layout.count()

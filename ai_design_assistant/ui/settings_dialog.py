@@ -125,7 +125,9 @@ class SettingsDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setObjectName("ok_button")
         buttons.rejected.connect(self.reject)
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("cancel_button")
         root.addWidget(buttons)
 
         # keep refs

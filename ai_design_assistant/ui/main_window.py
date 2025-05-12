@@ -85,6 +85,7 @@ class InputBar(QWidget):
         self.attach_btn.clicked.connect(self._attach_image)
 
         send_btn = QPushButton("📤", self)
+        send_btn.setObjectName("send_button")
         send_btn.setFixedWidth(30)
         send_btn.clicked.connect(self._emit_send)
 
@@ -181,10 +182,12 @@ class MainWindow(QMainWindow):
         left = QWidget(self)
         l_lay = QVBoxLayout(left)
         new_btn = QPushButton("＋ New chat")
+        new_btn.setObjectName("new_chat_button")
         new_btn.clicked.connect(self._new_chat)
         self.chat_list = QListWidget()
         self.chat_list.itemClicked.connect(self._switch_chat)
         settings_btn = QPushButton("⚙ Settings")
+        settings_btn.setObjectName("settings_button")
         settings_btn.setToolTip("Open preferences (Ctrl+,)")
         settings_btn.clicked.connect(self._open_settings)
         l_lay.addWidget(new_btn)
