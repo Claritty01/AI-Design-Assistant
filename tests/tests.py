@@ -59,4 +59,39 @@ def test_plugins_list_and_run():
 
 
 
+import base64
 
+def test_base64_roundtrip():
+    encoded = image_to_base64(BASE / "sample.png")
+    assert encoded.startswith("data:image/"), "Метка MIME неверна"
+
+    # Отрежем префикс и декодируем
+    header, data = encoded.split(",", 1)
+    decoded = base64.b64decode(data)
+
+    # Сохраним временно
+    tmp_path = BASE / "decoded_output.png"
+    tmp_path.write_bytes(decoded)
+    assert tmp_path.exists() and tmp_path.stat().st_size > 0, "base64-декодирование не работает"
+
+def test_empty_chat_save_load():
+    session = ChatSession.create_new()
+    session.save()
+    loaded = ChatSession.load(session._path)
+    assert loaded.messages == [], "Пустой чат должен загружаться как пустой"
+
+def test_plugin_reusability():
+    plugin = get_plugin_manager().get("remove_bg_plugin")
+    result1 = plugin.run(image_path=BASE / "sample.png")
+    result2 = plugin.run(image_path=BASE / "sample.png")
+    assert Path(result1).exists() and Path(result2).exists(), "Плагин не сработал при повторном вызове"
+
+
+def test_remove_background_missing_file():
+    with pytest.raises(FileNotFoundError):
+        remove_background(BASE / "not_existing_file.png")
+
+def test_plugins_presence():
+    names = get_plugin_manager().names
+    for expected in ["remove_bg_plugin", "upscale_plugin"]:
+        assert expected in names, f"Плагин '{expected}' не найден"
