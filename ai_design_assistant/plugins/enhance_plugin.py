@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QListWidgetItem, \
-    QListWidget
+    QListWidget, QProgressBar
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 from PIL import Image
@@ -23,6 +23,8 @@ class SwinIRWorker(QObject):
         self.image_path = image_path
 
     def run(self):
+        import gc
+        torch.cuda.empty_cache()  # пред очистка перед работой
         try:
             src = Path(self.image_path)
             dst = src.with_stem(f"{src.stem}_enhanced").with_suffix(".png")
@@ -62,6 +64,11 @@ class SwinIRWorker(QObject):
                 out_img.save(dst)
 
             self.finished.emit(str(dst))
+
+            # вручную очищаем память
+            del model, lr_tensor, sr_tensor, out_img
+            torch.cuda.empty_cache()
+            gc.collect()
         except Exception as e:
             self.error.emit(str(e))
 
@@ -95,6 +102,10 @@ class EnhanceWidget(QWidget):
         self.preview = QLabel("Превью")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)  # бесконечный спиннер
+        self.progress.setVisible(False)
+
         self.btn_run = QPushButton("\U0001F680 Улучшить")
         self.btn_run.clicked.connect(self._run)
         self.btn_run.setEnabled(False)
@@ -103,6 +114,7 @@ class EnhanceWidget(QWidget):
         layout.addWidget(self.label)
         layout.addWidget(self.gallery)
         layout.addWidget(self.preview, 1)
+        layout.addWidget(self.progress)
         layout.addWidget(self.btn_run)
 
     def set_chat_folder(self, folder_path: str):
@@ -150,6 +162,7 @@ class EnhanceWidget(QWidget):
             return
 
         self.btn_run.setEnabled(False)
+        self.progress.setVisible(True)
         self.label.setText("Обработка... ⏳")
 
         self.thread = QThread()
@@ -171,11 +184,13 @@ class EnhanceWidget(QWidget):
         self._refresh_gallery()
         self.label.setText("Готово! ✅")
         self.btn_run.setEnabled(True)
+        self.progress.setVisible(False)
 
     def _on_error(self, msg: str):
         QMessageBox.critical(self, "Ошибка", msg)
         self.label.setText("Ошибка")
         self.btn_run.setEnabled(True)
+        self.progress.setVisible(False)
 
     def _create_gallery_item(self, path: Path) -> QListWidgetItem:
         widget = QWidget()
