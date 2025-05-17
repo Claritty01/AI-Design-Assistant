@@ -1,6 +1,6 @@
 from pathlib import Path
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QMessageBox, QListWidgetItem, \
-    QListWidget, QProgressBar, QTabWidget
+    QListWidget, QProgressBar, QTabWidget, QComboBox
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 from PIL import Image
@@ -119,7 +119,16 @@ class EnhancePlugin(BaseImagePlugin):
 class EnhanceTabs(QWidget):
     def __init__(self):
         super().__init__()
-        self.model = self._init_model()
+        self.combo = QComboBox()
+        self.combo.addItems(["Быстрая", "Стандартная", "Глубокая"])
+        self.combo.currentIndexChanged.connect(self._reload_model)
+
+        initial_level = self.combo.currentText()
+        self.model = self._init_model(initial_level)
+
+        self.full = EnhanceSubWidget(self.model, tiled=False)
+        self.tiled = EnhanceSubWidget(self.model, tiled=True)
+
         self.tabs = QTabWidget()
 
         self.full = EnhanceSubWidget(self.model, tiled=False)
@@ -129,30 +138,83 @@ class EnhanceTabs(QWidget):
         self.tabs.addTab(self.tiled, "Поштучное улучшение")
 
         layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Выберите качество модели:"))
+        layout.addWidget(self.combo)
         layout.addWidget(self.tabs)
+
 
     def set_chat_folder(self, folder: str):
         self.full.set_chat_folder(folder)
         self.tiled.set_chat_folder(folder)
 
-    def _init_model(self):
+    def _reload_model(self):
+        level = self.combo.currentText()
+        self.model = self._init_model(level)
+        self.full.model = self.model
+        self.tiled.model = self.model
+
+    def _init_model(self, level: str) -> torch.nn.Module:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = SwinIR(
-            upscale=2,
-            in_chans=3,
-            img_size=64,
-            window_size=8,
-            img_range=1.0,
-            depths=[6, 6, 6, 6, 6, 6],
-            embed_dim=180,
-            num_heads=[6, 6, 6, 6, 6, 6],
-            mlp_ratio=2,
-            upsampler="nearest+conv",
-            resi_connection="1conv"
-        )
-        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+
+        if level == "Быстрая":
+            from .tools.SwinIR.models.network_swinir import SwinIR
+            model = SwinIR(
+                upscale=2,
+                in_chans=3,
+                img_size=64,
+                window_size=8,
+                img_range=1.,
+                depths=[6, 6, 6, 6],
+                embed_dim=60,
+                num_heads=[6, 6, 6, 6],
+                mlp_ratio=2,
+                upsampler="pixelshuffledirect",
+                resi_connection="1conv"
+            )
+            weights = Path("plugins/tools/SwinIR/002_lightweightSR_DIV2K_s64w8_SwinIR-S_x2.pth")
+
+
+        elif level == "Глубокая":
+            from .tools.SwinIR.models.network_swinir import SwinIR
+            model = SwinIR(
+                upscale=2,
+                in_chans=3,
+                img_size=64,
+                window_size=8,
+                img_range=1.0,
+                depths=[6, 6, 6, 6, 6, 6],
+                embed_dim=180,
+                num_heads=[6, 6, 6, 6, 6, 6],
+                mlp_ratio=2,
+                upsampler="nearest+conv",
+                resi_connection="1conv"
+            )
+            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+
+        else:  # Стандартная
+            from .tools.SwinIR.models.network_swinir import SwinIR
+            model = SwinIR(
+                upscale=2,
+                in_chans=3,
+                img_size=64,
+                window_size=8,
+                img_range=1.0,
+                depths=[6, 6, 6, 6, 6, 6],
+                embed_dim=180,
+                num_heads=[6, 6, 6, 6, 6, 6],
+                mlp_ratio=2,
+                upsampler="pixelshuffle",
+                resi_connection="1conv"
+            )
+            weights = Path("plugins/tools/SwinIR/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth")
+
         state_dict = torch.load(weights, map_location=device)
-        model.load_state_dict(state_dict["params"] if "params" in state_dict else state_dict, strict=True)
+        try:
+            model.load_state_dict(state_dict["params"] if "params" in state_dict else state_dict, strict=True)
+            print(f"[{level}] Загружено параметров: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+        except RuntimeError as e:
+            print(f"❌ Ошибка при загрузке модели [{level}]:", e)
+
         model.eval().to(device)
         return model
 
