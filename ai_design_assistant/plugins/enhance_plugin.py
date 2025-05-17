@@ -18,55 +18,32 @@ class SwinIRWorker(QObject):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, image_path: str):
+    def __init__(self, image_path: str, model: torch.nn.Module):
         super().__init__()
+        self.model = model
         self.image_path = image_path
 
     def run(self):
         import gc
-        torch.cuda.empty_cache()  # пред очистка перед работой
+        torch.cuda.empty_cache()
         try:
             src = Path(self.image_path)
             dst = src.with_stem(f"{src.stem}_enhanced").with_suffix(".png")
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = SwinIR(
-                upscale=2,
-                in_chans=3,
-                img_size=64,
-                window_size=8,
-                img_range=1.0,
-                depths=[6, 6, 6, 6, 6, 6],
-                embed_dim=180,
-                num_heads=[6, 6, 6, 6, 6, 6],
-                mlp_ratio=2,
-                upsampler="nearest+conv",
-                resi_connection="1conv"
-            )
-
-            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
-            state_dict = torch.load(weights, map_location=device)
-
-            if "params" in state_dict:
-                model.load_state_dict(state_dict["params"], strict=True)
-            else:
-                model.load_state_dict(state_dict, strict=True)
-
-            model.eval().to(device)
-
             with Image.open(src).convert("RGB") as img:
+                device = next(self.model.parameters()).device
                 lr_tensor = to_tensor(img).unsqueeze(0).to(device)
 
                 with torch.no_grad():
-                    sr_tensor = model(lr_tensor)
+                    sr_tensor = self.model(lr_tensor)
 
                 out_img = to_pil_image(sr_tensor.squeeze(0).clamp(0, 1).float().cpu())
                 out_img.save(dst)
 
             self.finished.emit(str(dst))
 
-            # вручную очищаем память
-            del model, lr_tensor, sr_tensor, out_img
+            # очистка
+            del lr_tensor, sr_tensor, out_img
             torch.cuda.empty_cache()
             gc.collect()
         except Exception as e:
@@ -87,6 +64,7 @@ class EnhanceWidget(QWidget):
     def __init__(self, plugin: EnhancePlugin):
         super().__init__()
         self.plugin = plugin
+        self.model = self._init_model()
         self.current_folder: Path | None = None
         self.selected_path: Path | None = None
         self.last_result_path: Path | None = None
@@ -166,7 +144,7 @@ class EnhanceWidget(QWidget):
         self.label.setText("Обработка... ⏳")
 
         self.thread = QThread()
-        self.worker = SwinIRWorker(str(self.selected_path))
+        self.worker = SwinIRWorker(str(self.selected_path), self.model)
         self.worker.moveToThread(self.thread)
 
         self.thread.started.connect(self.worker.run)
@@ -225,3 +203,25 @@ class EnhanceWidget(QWidget):
         self.gallery.setItemWidget(item, widget)
 
         return item
+
+    def _init_model(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = SwinIR(
+            upscale=2,
+            in_chans=3,
+            img_size=64,
+            window_size=8,
+            img_range=1.0,
+            depths=[6, 6, 6, 6, 6, 6],
+            embed_dim=180,
+            num_heads=[6, 6, 6, 6, 6, 6],
+            mlp_ratio=2,
+            upsampler="nearest+conv",
+            resi_connection="1conv"
+        )
+        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+        state_dict = torch.load(weights, map_location=device)
+        model.load_state_dict(state_dict["params"] if "params" in state_dict else state_dict, strict=True)
+        model.eval().to(device)
+        return model
+
