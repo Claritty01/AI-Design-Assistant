@@ -1,8 +1,6 @@
-"""Enhance plugin – full‑featured editor dialog with threaded SwinIR"""
-
 from pathlib import Path
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QListWidgetItem, \
-    QListWidget, QProgressBar
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QMessageBox, QListWidgetItem, \
+    QListWidget, QProgressBar, QTabWidget
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 from PIL import Image
@@ -14,25 +12,27 @@ from ai_design_assistant.core.plugins import BaseImagePlugin
 from .tools.SwinIR.models.network_swinir import SwinIR
 
 
-class SwinIRWorker(QObject):
+# ─────────────────────────────────────────────────────────────────────────────
+# WORKERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class SwinIRWorkerFull(QObject):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
     def __init__(self, image_path: str, model: torch.nn.Module):
         super().__init__()
-        self.model = model
         self.image_path = image_path
+        self.model = model
 
     def run(self):
         import gc
-        torch.cuda.empty_cache()
         try:
             src = Path(self.image_path)
             dst = src.with_stem(f"{src.stem}_enhanced").with_suffix(".png")
 
             with Image.open(src).convert("RGB") as img:
-                device = next(self.model.parameters()).device
-                lr_tensor = to_tensor(img).unsqueeze(0).to(device)
+                lr_tensor = to_tensor(img).unsqueeze(0).to(next(self.model.parameters()).device)
 
                 with torch.no_grad():
                     sr_tensor = self.model(lr_tensor)
@@ -41,8 +41,6 @@ class SwinIRWorker(QObject):
                 out_img.save(dst)
 
             self.finished.emit(str(dst))
-
-            # очистка
             del lr_tensor, sr_tensor, out_img
             torch.cuda.empty_cache()
             gc.collect()
@@ -50,159 +48,92 @@ class SwinIRWorker(QObject):
             self.error.emit(str(e))
 
 
+class SwinIRWorkerTiled(QObject):
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+    progress = pyqtSignal(int)
+
+    def __init__(self, image_path: str, model: torch.nn.Module, tile_size=256):
+        super().__init__()
+        self.image_path = image_path
+        self.model = model
+        self.tile_size = tile_size
+
+    def run(self):
+        import gc
+        try:
+            src = Path(self.image_path)
+            dst = src.with_stem(f"{src.stem}_enhanced_tiled").with_suffix(".png")
+            device = next(self.model.parameters()).device
+
+            with Image.open(src).convert("RGB") as img:
+                w, h = img.size
+                tile = self.tile_size
+                result = Image.new("RGB", (w * 2, h * 2))
+
+                count_x = (w + tile - 1) // tile
+                count_y = (h + tile - 1) // tile
+                total = count_x * count_y
+                done = 0
+
+                for y in range(0, h, tile):
+                    for x in range(0, w, tile):
+                        crop = img.crop((x, y, x + tile, y + tile))
+                        lr_tensor = to_tensor(crop).unsqueeze(0).to(device)
+
+                        with torch.no_grad():
+                            sr_tensor = self.model(lr_tensor)
+
+                        sr_img = to_pil_image(sr_tensor.squeeze(0).clamp(0, 1).float().cpu())
+                        result.paste(sr_img, (x * 2, y * 2))
+
+                        done += 1
+                        self.progress.emit(int(done / total * 100))
+
+                result.save(dst)
+                self.finished.emit(str(dst))
+
+                del lr_tensor, sr_tensor, result
+                torch.cuda.empty_cache()
+                gc.collect()
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN PLUGIN
+# ─────────────────────────────────────────────────────────────────────────────
+
 class EnhancePlugin(BaseImagePlugin):
     display_name = "Улучшение качества"
     description = "Повышает чёткость изображения с помощью SwinIR."
 
     def get_widget(self):
-        return EnhanceWidget(self)
+        return EnhanceTabs()
 
 
-class EnhanceWidget(QWidget):
-    THUMB_SIZE = QSize(80, 80)
+# ─────────────────────────────────────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────────────────────────────────────
 
-    def __init__(self, plugin: EnhancePlugin):
+class EnhanceTabs(QWidget):
+    def __init__(self):
         super().__init__()
-        self.plugin = plugin
         self.model = self._init_model()
-        self.current_folder: Path | None = None
-        self.selected_path: Path | None = None
-        self.last_result_path: Path | None = None
+        self.tabs = QTabWidget()
 
-        self.label = QLabel("Выберите изображение для улучшения:")
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.full = EnhanceSubWidget(self.model, tiled=False)
+        self.tiled = EnhanceSubWidget(self.model, tiled=True)
 
-        self.gallery = QListWidget()
-        self.gallery.setIconSize(self.THUMB_SIZE)
-        self.gallery.setMinimumHeight(350)
-        self.gallery.itemClicked.connect(self._on_image_selected)
-
-        self.preview = QLabel("Превью")
-        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)  # бесконечный спиннер
-        self.progress.setVisible(False)
-
-        self.btn_run = QPushButton("\U0001F680 Улучшить")
-        self.btn_run.clicked.connect(self._run)
-        self.btn_run.setEnabled(False)
+        self.tabs.addTab(self.full, "Обычное улучшение")
+        self.tabs.addTab(self.tiled, "Поштучное улучшение")
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.label)
-        layout.addWidget(self.gallery)
-        layout.addWidget(self.preview, 1)
-        layout.addWidget(self.progress)
-        layout.addWidget(self.btn_run)
+        layout.addWidget(self.tabs)
 
-    def set_chat_folder(self, folder_path: str):
-        self.current_folder = Path(folder_path) / "images"
-        self._refresh_gallery()
-
-    def _refresh_gallery(self):
-        self.gallery.clear()
-        if not self.current_folder or not self.current_folder.exists():
-            return
-
-        for path in sorted(self.current_folder.glob("*")):
-            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
-                self._create_gallery_item(path)
-
-        if self.last_result_path:
-            self._highlight_item(self.last_result_path)
-
-    def _on_image_selected(self, item: QListWidgetItem):
-        path = Path(item.data(Qt.ItemDataRole.UserRole))
-        self.selected_path = path
-        self._update_preview(path)
-        self.btn_run.setEnabled(True)
-
-    def _update_preview(self, path: Path):
-        pixmap = QPixmap(str(path)).scaledToWidth(240, Qt.TransformationMode.SmoothTransformation)
-        self.preview.setPixmap(pixmap)
-        self.label.setText(f"Выбрано: {path.name}")
-
-    def _highlight_item(self, path: Path):
-        for i in range(self.gallery.count()):
-            item = self.gallery.item(i)
-            if Path(item.data(Qt.ItemDataRole.UserRole)) == path:
-                self.gallery.setCurrentItem(item)
-                item.setSelected(True)
-                self.gallery.scrollToItem(item)
-                self._update_preview(path)
-                self.selected_path = path
-                self.btn_run.setEnabled(True)
-                break
-
-    def _run(self):
-        if not self.selected_path:
-            QMessageBox.warning(self, "Нет файла", "Сначала выберите изображение.")
-            return
-
-        self.btn_run.setEnabled(False)
-        self.progress.setVisible(True)
-        self.label.setText("Обработка... ⏳")
-
-        self.thread = QThread()
-        self.worker = SwinIRWorker(str(self.selected_path), self.model)
-        self.worker.moveToThread(self.thread)
-
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_result)
-        self.worker.error.connect(self._on_error)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.thread.start()
-
-    def _on_result(self, result: str):
-        self.last_result_path = Path(result)
-        QMessageBox.information(self, "Готово", f"Изображение сохранено: {result}")
-        self._refresh_gallery()
-        self.label.setText("Готово! ✅")
-        self.btn_run.setEnabled(True)
-        self.progress.setVisible(False)
-
-    def _on_error(self, msg: str):
-        QMessageBox.critical(self, "Ошибка", msg)
-        self.label.setText("Ошибка")
-        self.btn_run.setEnabled(True)
-        self.progress.setVisible(False)
-
-    def _create_gallery_item(self, path: Path) -> QListWidgetItem:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(4, 0, 4, 0)
-
-        name_label = QLabel(path.name)
-        name_label.setStyleSheet("font-weight: bold;")
-
-        mtime = datetime.fromtimestamp(path.stat().st_mtime)
-        now = datetime.now()
-        subtitle = mtime.strftime("%H:%M") if mtime.date() == now.date() else mtime.strftime("%d.%m.%Y")
-
-        subtitle_label = QLabel(subtitle)
-        subtitle_label.setStyleSheet("color: gray; font-size: 10px;")
-
-        layout.addWidget(name_label)
-        layout.addWidget(subtitle_label)
-
-        icon = QIcon(QPixmap(str(path)).scaled(
-            self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        ))
-
-        item = QListWidgetItem()
-        item.setSizeHint(widget.sizeHint())
-        item.setSizeHint(QSize(100, 80))
-        item.setData(Qt.ItemDataRole.UserRole, str(path))
-        item.setIcon(icon)
-
-        self.gallery.addItem(item)
-        self.gallery.setItemWidget(item, widget)
-
-        return item
+    def set_chat_folder(self, folder: str):
+        self.full.set_chat_folder(folder)
+        self.tiled.set_chat_folder(folder)
 
     def _init_model(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -224,4 +155,118 @@ class EnhanceWidget(QWidget):
         model.load_state_dict(state_dict["params"] if "params" in state_dict else state_dict, strict=True)
         model.eval().to(device)
         return model
+
+
+class EnhanceSubWidget(QWidget):
+    THUMB_SIZE = QSize(80, 80)
+
+    def __init__(self, model: torch.nn.Module, tiled: bool):
+        super().__init__()
+        self.model = model
+        self.tiled = tiled
+        self.selected_path: Path | None = None
+        self.current_folder: Path | None = None
+        self.thread: QThread | None = None
+        self.worker: QObject | None = None
+
+        self.label = QLabel("Выберите изображение:")
+        self.gallery = QListWidget()
+        self.gallery.setIconSize(self.THUMB_SIZE)
+        self.gallery.itemClicked.connect(self._on_image_selected)
+
+        self.preview = QLabel("Превью")
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.progress = QProgressBar()
+        self.progress.setVisible(False)
+
+        self.btn_run = QPushButton("🚀 Улучшить")
+        self.btn_run.setEnabled(False)
+        self.btn_run.clicked.connect(self._run)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.label)
+        layout.addWidget(self.gallery)
+        layout.addWidget(self.preview, 1)
+        layout.addWidget(self.progress)
+        layout.addWidget(self.btn_run)
+
+    def set_chat_folder(self, folder_path: str):
+        self.current_folder = Path(folder_path) / "images"
+        self._refresh_gallery()
+
+    def _refresh_gallery(self):
+        self.gallery.clear()
+        if not self.current_folder or not self.current_folder.exists():
+            return
+
+        for path in sorted(self.current_folder.glob("*")):
+            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+                item = QListWidgetItem(Path(path).name)
+                item.setData(Qt.ItemDataRole.UserRole, str(path))
+                icon = QIcon(QPixmap(str(path)).scaled(
+                    self.THUMB_SIZE, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                ))
+                item.setIcon(icon)
+                self.gallery.addItem(item)
+
+    def _on_image_selected(self, item: QListWidgetItem):
+        self.selected_path = Path(item.data(Qt.ItemDataRole.UserRole))
+        pixmap = QPixmap(str(self.selected_path)).scaledToWidth(240, Qt.TransformationMode.SmoothTransformation)
+        self.preview.setPixmap(pixmap)
+        self.label.setText(f"Выбрано: {self.selected_path.name}")
+        self.btn_run.setEnabled(True)
+
+    def _run(self):
+        if not self.selected_path:
+            return
+
+        if self.thread and self.thread.isRunning():
+            QMessageBox.warning(self, "Подождите", "Обработка ещё не завершена.")
+            return
+
+        self.btn_run.setEnabled(False)
+        self.progress.setVisible(True)
+        self.progress.setValue(0)
+        self.label.setText("Обработка...")
+
+        self.thread = QThread(self)
+        if self.tiled:
+            self.worker = SwinIRWorkerTiled(str(self.selected_path), self.model, tile_size=256)
+            self.worker.progress.connect(self.progress.setValue)
+        else:
+            self.worker = SwinIRWorkerFull(str(self.selected_path), self.model)
+
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+
+        # Сигналы результата
+        self.worker.finished.connect(self._on_done)
+        self.worker.error.connect(self._on_error)
+
+        # Завершение потока безопасно
+        self.worker.finished.connect(self._cleanup_thread)
+        self.worker.error.connect(self._cleanup_thread)
+
+        self.thread.start()
+
+    def _on_done(self, result: str):
+        QMessageBox.information(self, "Готово", f"Сохранено: {result}")
+        self.progress.setVisible(False)
+        self.label.setText("Готово!")
+        self.btn_run.setEnabled(True)
+
+    def _on_error(self, msg: str):
+        QMessageBox.critical(self, "Ошибка", msg)
+        self.progress.setVisible(False)
+        self.label.setText("Ошибка.")
+        self.btn_run.setEnabled(True)
+
+    def _cleanup_thread(self):
+        if self.thread:
+            self.thread.quit()
+            self.thread.wait()
+            self.thread = None
+            self.worker = None
 
