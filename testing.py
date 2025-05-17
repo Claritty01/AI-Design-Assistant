@@ -7,3 +7,5 @@ if torch.cuda.is_available():
     print("Текущее устройство ID:", torch.cuda.current_device())
 else:
     print("CUDA не доступна. Используется CPU.")
+
+print(torch.cuda.get_device_capability(0))  # Например: (8, 9) для sm_89

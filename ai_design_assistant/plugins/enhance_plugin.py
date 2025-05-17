@@ -1,3 +1,5 @@
+"""Enhance plugin – full‑featured editor dialog."""
+
 from pathlib import Path
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QListWidgetItem, \
     QListWidget
