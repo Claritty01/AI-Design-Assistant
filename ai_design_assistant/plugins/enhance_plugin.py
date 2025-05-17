@@ -1,69 +1,74 @@
-"""Enhance plugin – full‑featured editor dialog."""
+"""Enhance plugin – full‑featured editor dialog with threaded SwinIR"""
 
 from pathlib import Path
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QListWidgetItem, \
     QListWidget
 from PyQt6.QtGui import QPixmap, QIcon
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QObject
 from PIL import Image
 import torch
 from torchvision.transforms.functional import to_tensor, to_pil_image
 from datetime import datetime
 
-
 from ai_design_assistant.core.plugins import BaseImagePlugin
 from .tools.SwinIR.models.network_swinir import SwinIR
 
+
+class SwinIRWorker(QObject):
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, image_path: str):
+        super().__init__()
+        self.image_path = image_path
+
+    def run(self):
+        try:
+            src = Path(self.image_path)
+            dst = src.with_stem(f"{src.stem}_enhanced").with_suffix(".png")
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = SwinIR(
+                upscale=2,
+                in_chans=3,
+                img_size=64,
+                window_size=8,
+                img_range=1.0,
+                depths=[6, 6, 6, 6, 6, 6],
+                embed_dim=180,
+                num_heads=[6, 6, 6, 6, 6, 6],
+                mlp_ratio=2,
+                upsampler="nearest+conv",
+                resi_connection="1conv"
+            )
+
+            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+            state_dict = torch.load(weights, map_location=device)
+
+            if "params" in state_dict:
+                model.load_state_dict(state_dict["params"], strict=True)
+            else:
+                model.load_state_dict(state_dict, strict=True)
+
+            model.eval().to(device)
+
+            with Image.open(src).convert("RGB") as img:
+                lr_tensor = to_tensor(img).unsqueeze(0).to(device)
+
+                with torch.no_grad():
+                    sr_tensor = model(lr_tensor)
+
+                out_img = to_pil_image(sr_tensor.squeeze(0).clamp(0, 1).float().cpu())
+                out_img.save(dst)
+
+            self.finished.emit(str(dst))
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class EnhancePlugin(BaseImagePlugin):
     display_name = "Улучшение качества"
     description = "Повышает чёткость изображения с помощью SwinIR."
-
-    def run(self, image_path: str, **kwargs) -> str:
-        src = Path(image_path)
-        dst = src.with_stem(f"{src.stem}_enhanced").with_suffix(".png")
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        use_half = device.type == "cuda"
-
-        model = SwinIR(
-            upscale=2,
-            in_chans=3,
-            img_size=64,
-            window_size=8,
-            img_range=1.0,
-            depths=[6, 6, 6, 6, 6, 6],
-            embed_dim=180,
-            num_heads=[6, 6, 6, 6, 6, 6],
-            mlp_ratio=2,
-            upsampler="nearest+conv",
-            resi_connection="1conv"
-        )
-
-        # веса на 4x
-        # weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth")
-        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
-        state_dict = torch.load(weights, map_location=device)
-        print("state_dict keys:", list(state_dict.keys()))
-
-        if "params" in state_dict:
-            model.load_state_dict(state_dict["params"], strict=True)
-        else:
-            model.load_state_dict(state_dict, strict=True)
-
-        model.eval().to(device)
-
-        with Image.open(src).convert("RGB") as img:
-            lr_tensor = to_tensor(img).unsqueeze(0).to(device)
-
-            with torch.no_grad():
-                sr_tensor = model(lr_tensor)
-
-            out_img = to_pil_image(sr_tensor.squeeze(0).clamp(0, 1).float().cpu())
-            out_img.save(dst)
-
-        return str(dst)
 
     def get_widget(self):
         return EnhanceWidget(self)
@@ -90,7 +95,7 @@ class EnhanceWidget(QWidget):
         self.preview = QLabel("Превью")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.btn_run = QPushButton("🚀 Улучшить")
+        self.btn_run = QPushButton("\U0001F680 Улучшить")
         self.btn_run.clicked.connect(self._run)
         self.btn_run.setEnabled(False)
 
@@ -143,16 +148,34 @@ class EnhanceWidget(QWidget):
         if not self.selected_path:
             QMessageBox.warning(self, "Нет файла", "Сначала выберите изображение.")
             return
-        try:
-            result = self.plugin.run(str(self.selected_path))
-            self.last_result_path = Path(result)  # ⬅ запоминаем
-            QMessageBox.information(self, "Готово", f"Изображение сохранено: {result}")
-            self._refresh_gallery()
-            self.last_result_path = Path(result)  # запоминаем путь
 
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", str(e))
+        self.btn_run.setEnabled(False)
+        self.label.setText("Обработка... ⏳")
 
+        self.thread = QThread()
+        self.worker = SwinIRWorker(str(self.selected_path))
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_result)
+        self.worker.error.connect(self._on_error)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+
+    def _on_result(self, result: str):
+        self.last_result_path = Path(result)
+        QMessageBox.information(self, "Готово", f"Изображение сохранено: {result}")
+        self._refresh_gallery()
+        self.label.setText("Готово! ✅")
+        self.btn_run.setEnabled(True)
+
+    def _on_error(self, msg: str):
+        QMessageBox.critical(self, "Ошибка", msg)
+        self.label.setText("Ошибка")
+        self.btn_run.setEnabled(True)
 
     def _create_gallery_item(self, path: Path) -> QListWidgetItem:
         widget = QWidget()
@@ -187,4 +210,3 @@ class EnhanceWidget(QWidget):
         self.gallery.setItemWidget(item, widget)
 
         return item
-
