@@ -163,15 +163,20 @@ class EnhanceTabs(QWidget):
                 in_chans=3,
                 img_size=64,
                 window_size=8,
-                img_range=1.,
-                depths=[6, 6, 6, 6],
-                embed_dim=60,
-                num_heads=[6, 6, 6, 6],
+                img_range=1.0,
+                #depths=[6, 6, 6, 6],
+                depths=[6, 6, 6, 6, 6, 6],
+                embed_dim=180,
+                #embed_dim=60,
+                #num_heads=[6, 6, 6, 6],
+                num_heads=[6, 6, 6, 6, 6, 6],
                 mlp_ratio=2,
-                upsampler="pixelshuffledirect",
+                #upsampler="pixelshuffledirect",
+                upsampler="nearest+conv",
                 resi_connection="1conv"
             )
-            weights = Path("plugins/tools/SwinIR/002_lightweightSR_DIV2K_s64w8_SwinIR-S_x2.pth")
+            #weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
 
 
         elif level == "Глубокая":
@@ -203,10 +208,12 @@ class EnhanceTabs(QWidget):
                 embed_dim=180,
                 num_heads=[6, 6, 6, 6, 6, 6],
                 mlp_ratio=2,
-                upsampler="pixelshuffle",
+                upsampler="nearest+conv",
+                #upsampler="pixelshuffle",
                 resi_connection="1conv"
             )
-            weights = Path("plugins/tools/SwinIR/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth")
+            #weights = Path("plugins/tools/SwinIR/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth")
+            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
 
         state_dict = torch.load(weights, map_location=device)
         try:

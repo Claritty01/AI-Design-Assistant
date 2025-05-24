@@ -15,8 +15,20 @@ from ai_design_assistant.core.plugins import BaseImagePlugin
 from ai_design_assistant.ui.main_window import get_main_window
 
 class RemoveBGPlugin(BaseImagePlugin):
-    display_name = "Удаление фона"
+    name = "remove_background"
     description = "Удаляет фон с изображения при помощи rembg."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "image_path": {
+                "type": "string",
+                "description": "Путь к изображению"
+            }
+        },
+        "required": ["image_path"]
+    }
+
+    display_name = "Удаление фона"
 
     def run(self, image_path: str, **kwargs):
         src = Path(image_path)
