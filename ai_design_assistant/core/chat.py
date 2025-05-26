@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final, Literal, Optional, Iterable
 
+
+import tempfile
+
 from platformdirs import user_data_dir
 from ai_design_assistant.core.settings import get_chats_directory
 
@@ -80,7 +83,14 @@ class ChatSession:
     @classmethod
     def create_new(cls) -> ChatSession:
         session = cls()
-        session._path = cls._generate_filename()
+        chats_dir = get_chats_directory()
+
+        # Папка конкретного чата
+        chat_dir = chats_dir / session.uuid
+        chat_dir.mkdir(parents=True, exist_ok=True)
+
+        # Путь к JSON-файлу внутри chat_N/chat_N.json
+        session._path = chat_dir / f"{session.uuid}.json"
         return session
 
     # ──────────────── File ops ────────────────
@@ -107,17 +117,36 @@ class ChatSession:
         )
 
     def save(self) -> Path:
-        if self._path is None or not self._path.name.startswith("chat_"):
-            logger.warning(f"Generating new path. Old _path: {self._path}")
+        if self._path is None or not self._path.name.endswith(".json"):
+            logger.warning(f"Генерируется путь, старый _path: {self._path}")
             self._path = self._generate_filename()
-        payload = self.to_dict()
-        self._path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info(f"Chat saved to: {self._path}")
-        return self._path
+
+        try:
+            logger.debug(f"Сохраняю чат в: {self._path}")
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+
+            payload = self.to_dict()
+            logger.debug(f"Сообщений в чате: {len(payload['messages'])}")
+
+            # Безопасная атомарная перезапись через временный файл
+            with tempfile.NamedTemporaryFile("w", dir=self._path.parent, delete=False, encoding="utf-8") as tmp:
+                json.dump(payload, tmp, ensure_ascii=False, indent=2)
+                tmp_path = Path(tmp.name)
+
+            tmp_path.replace(self._path)
+
+            logger.info(f"Чат успешно сохранён: {self._path}")
+            return self._path
+
+        except Exception as e:
+            logger.exception(f"Ошибка при сохранении чата: {e}")
+            raise
 
     @classmethod
     def load(cls, path: str | Path) -> ChatSession:
         p = Path(path).expanduser().resolve()
+        if p.is_dir():
+            raise ValueError(f"Нельзя загрузить чат: путь {p} — это папка, а не JSON-файл.")
         data = json.loads(p.read_text("utf-8"))
         session = cls.from_dict(data)
         session._path = p
@@ -162,28 +191,41 @@ class ChatSession:
     @classmethod
     def _chats_root(cls) -> Path:
         root = get_chats_directory()
+
+        # Если по пути внезапно файл – переименуем и создадим папку
+        if root.exists() and root.is_file():
+            backup = root.with_suffix(".bak")
+            root.rename(backup)
+            logger.warning(f"Файл {root} переименован в {backup}; создаю папку.")
         root.mkdir(parents=True, exist_ok=True)
         return root
 
     @classmethod
     def _generate_filename(cls) -> Path:
         root = cls._chats_root()
-        nums = [
-            int(p.name.split("_")[1])
-            for p in root.iterdir()
-            if p.is_dir() and p.name.startswith("chat_") and p.name.split("_")[1].isdigit()
-        ]
-        next_num = max(nums, default=0) + 1
-        chat_dir = root / f"chat_{next_num}"
-        chat_dir.mkdir(parents=True, exist_ok=False)
-        logger.info("Creating chat directory: %s", chat_dir)
-        return chat_dir / f"chat_{next_num}.json"
+        next_num = 1
 
-    def short_summary(self, max_len: int = 60) -> str:
-        if not self.messages:
-            return "(empty)"
-        last = self.messages[-1].content.replace("\n", " ")
-        return last[:max_len] + ("…" if len(last) > max_len else "")
+        while True:
+            chat_dir = root / f"chat_{next_num}"
+            json_path = chat_dir / f"chat_{next_num}.json"
+
+            # 🛡 если по пути chat_dir — файл, а не папка → удалим
+            if chat_dir.exists() and not chat_dir.is_dir():
+                try:
+                    chat_dir.unlink()
+                    logger.warning(f"Удалён конфликтный файл по пути: {chat_dir}")
+                except Exception as e:
+                    logger.error(f"Не удалось удалить конфликтный файл {chat_dir}: {e}")
+                    next_num += 1
+                    continue
+
+            try:
+                chat_dir.mkdir(parents=True, exist_ok=False)
+                logger.info(f"Создана директория чата: {chat_dir}")
+                return json_path
+            except (FileExistsError, PermissionError) as e:
+                logger.warning(f"Проблема с {chat_dir}: {e}")
+                next_num += 1
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,3 +237,35 @@ def migrate_chat_data(data: dict, from_version: int) -> dict:
     if from_version == 1:
         return data  # пока изменений нет
     raise ValueError(f"Unsupported schema version: {from_version}")
+
+def handle_tool_calls(tool_calls: list[dict], chat: ChatSession) -> list[Message]:
+    """Обрабатывает tool_calls от OpenAI и вызывает соответствующие плагины."""
+    from ai_design_assistant.core.plugins import get_plugin_by_name
+
+    results = []
+    for call in tool_calls:
+        try:
+            name = call["function"]["name"]
+            args = json.loads(call["function"]["arguments"])
+
+            plugin = get_plugin_by_name(name)
+            if plugin is None:
+                logger.warning(f"Плагин не найден: {name}")
+                continue
+
+            result_path = plugin.run(**args)
+
+            # Добавляем результат как сообщение ассистента
+            msg = chat.add_image_message("assistant", f"[{plugin.display_name}] Готово!", result_path)
+            results.append(msg)
+        except Exception as e:
+            logger.exception(f"Ошибка при выполнении tool_call: {e}")
+            msg = chat.add_message("assistant", f"❌ Ошибка при вызове плагина: {e}")
+            results.append(msg)
+    return results
+
+def atomic_write_json(path: Path, data: dict) -> None:
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as tmp:
+        json.dump(data, tmp, ensure_ascii=False, indent=2)
+        temp_path = Path(tmp.name)
+    temp_path.replace(path)

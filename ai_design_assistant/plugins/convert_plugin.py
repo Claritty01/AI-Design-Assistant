@@ -14,8 +14,24 @@ from ai_design_assistant.core.plugins import BaseImagePlugin
 
 
 class ConvertPlugin(BaseImagePlugin):
-    display_name = "Конвертация форматов"
-    description = "Конвертирует изображения в PNG, JPEG, BMP и др."
+    name = "convert_image_format"
+    display_name = "Конвертация формата"
+    description = "Конвертирует изображение в другой формат. Поддерживаются PNG, JPEG, BMP, WEBP."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "image_path": {
+                "type": "string",
+                "description": "Путь к изображению"
+            },
+            "format": {
+                "type": "string",
+                "enum": ["PNG", "JPEG", "BMP", "WEBP"],
+                "description": "Желаемый формат"
+            }
+        },
+        "required": ["image_path", "format"]
+    }
 
     def run(self, image_path: str, to_format: str = "png", **kwargs) -> str:
         src = Path(image_path)

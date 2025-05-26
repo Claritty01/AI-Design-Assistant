@@ -52,6 +52,17 @@ def get_chats_directory() -> Path:
     else:
         return Path(chats_path).resolve()
 
+    p = Path(chats_path).expanduser()
+
+    # Пользователь мог сохранить путь до файла → отходим на каталог
+    if p.suffix.lower() == ".json" or p.is_file():
+        p = p.parent
+
+    if not p.is_absolute():
+        p = (Path(__file__).parent.parent / p).resolve()
+
+    return p
+
 # ---------------------------------------------------------------------------#
 #  Dataclass                                                                  #
 # ---------------------------------------------------------------------------#

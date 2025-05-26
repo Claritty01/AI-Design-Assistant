@@ -311,7 +311,12 @@ class MainWindow(QMainWindow):
         self.gallery_panel.refresh()
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
-        worker = GenerateThread(self.router, list(self.current.messages), self.current._path.parent)
+        worker = GenerateThread(
+            self.router,
+            list(self.current.messages),
+            self.current._path.parent,  # путь к папке, где images/
+            self.current._path  # путь к .json
+        )
 
         worker.token_received.connect(self._on_token_received)
         worker.finished.connect(self._on_llm_reply)
@@ -377,7 +382,12 @@ class MainWindow(QMainWindow):
         self.gallery_panel.refresh()
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
-        worker = GenerateThread(self.router, list(self.current.messages))
+        worker = GenerateThread(
+            self.router,
+            list(self.current.messages),
+            self.current._path.parent,  # путь к папке, где images/
+            self.current._path  # путь к .json
+        )
         worker.token_received.connect(self._on_token_received)
         worker.finished.connect(self._on_llm_reply)
         worker.error.connect(self._on_llm_error)

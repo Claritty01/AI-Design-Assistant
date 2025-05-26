@@ -143,6 +143,13 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------#
     def accept(self) -> None:  # noqa: D401
         # non-secret settings → JSON
+        raw_path = Path(self._chats_le.text().strip())
+
+        # Если пользователь по ошибке указал файл – берём родительскую папку
+        if raw_path.suffix.lower() == ".json" or raw_path.is_file():
+            raw_path = raw_path.parent
+
+        self._settings.chats_path = str(raw_path)
         self._settings.chats_path = self._chats_le.text().strip()
         self._settings.model_provider = self._model_cb.currentText()
         self._settings.theme = self._theme_cb.currentText()

@@ -14,8 +14,25 @@ from ai_design_assistant.core.plugins import BaseImagePlugin
 
 
 class CompressPlugin(BaseImagePlugin):
-    display_name = "Сжатие изображений"
-    description = "Сжимает изображения JPEG и PNG с возможностью настройки уровня."
+    name = "compress_image"
+    display_name = "Сжатие изображения"
+    description = "Сжимает изображение с заданным уровнем качества (JPEG)."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "image_path": {
+                "type": "string",
+                "description": "Путь к изображению"
+            },
+            "quality": {
+                "type": "integer",
+                "description": "Качество JPEG (0–100)",
+                "minimum": 1,
+                "maximum": 100
+            }
+        },
+        "required": ["image_path", "quality"]
+    }
 
     def run(self, image_path: str, **kwargs) -> str:
         src = Path(image_path)

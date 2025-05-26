@@ -186,3 +186,29 @@ class BaseImagePlugin(BasePlugin):
     def run(self, **kwargs):
         raise NotImplementedError
 
+def get_all_plugins() -> list[BasePlugin]:
+    """Возвращает все загруженные плагины как список объектов."""
+    return list(get_plugin_manager()._plugins.values())
+
+def get_plugin_by_name(name: str) -> BasePlugin | None:
+    """Возвращает плагин по его логическому имени (plugin.name)."""
+    for plugin in get_all_plugins():
+        if getattr(plugin, "name", None) == name:
+            return plugin
+    return None
+
+
+def get_function_descriptions() -> list[dict]:
+    """Формирует описание функций (tools) на основе всех плагинов."""
+    tools = []
+    for plugin in get_all_plugins():
+        if hasattr(plugin, "name") and hasattr(plugin, "parameters"):
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": plugin.name,
+                    "description": plugin.description,
+                    "parameters": plugin.parameters
+                }
+            })
+    return tools

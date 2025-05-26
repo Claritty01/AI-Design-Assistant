@@ -105,8 +105,24 @@ class SwinIRWorkerTiled(QObject):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class EnhancePlugin(BaseImagePlugin):
+    name = "enhance_image"
     display_name = "Улучшение качества"
-    description = "Повышает чёткость изображения с помощью SwinIR."
+    description = "Улучшает изображение с помощью SwinIR. Поддерживаются режимы: Быстрая, Стандартная, Глубокая."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "image_path": {
+                "type": "string",
+                "description": "Путь к изображению"
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["Быстрая", "Стандартная", "Глубокая"],
+                "description": "Режим улучшения"
+            }
+        },
+        "required": ["image_path", "mode"]
+    }
 
     def get_widget(self):
         return EnhanceTabs()
@@ -326,7 +342,9 @@ class EnhanceSubWidget(QWidget):
         self.label.setText("Готово!")
         self.btn_run.setEnabled(True)
 
-    def _on_error(self, msg: str):
+    def _on_error(self, msg: str) -> None:
+        print("❌ Ошибка в потоке:", msg)  # ← вывод в консоль
+        logger.error("❌ Ошибка в потоке: %s", msg)
         QMessageBox.critical(self, "Ошибка", msg)
         self.progress.setVisible(False)
         self.label.setText("Ошибка.")
