@@ -51,7 +51,7 @@ class GenerateThread(QThread):
             full_text = ""
             message = None
 
-            for result in self.get_router().stream(prepared_messages):
+            for result in self.get_router().stream(prepared_messages, backend=self.get_router()._default):
                 if isinstance(result, str):
                     self.token_received.emit(result)
                     full_text += result

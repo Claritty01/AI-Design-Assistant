@@ -20,7 +20,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QCoreApplication
 
-from ai_design_assistant.ui.main_window import MainWindow
+from ai_design_assistant.ui import main_window as mw
 from ai_design_assistant.core.settings import Settings
 from ai_design_assistant.core.logger import configure_logging
 
@@ -48,10 +48,9 @@ def main() -> None:
     app.setStyleSheet(style)
 
     # 6️⃣ Main UI
-    window = MainWindow()
-    global _MAIN_WINDOW
-    _MAIN_WINDOW = window
-    window.show()
+    win = mw.MainWindow()
+    mw._MAIN_WINDOW = win
+    win.show()
 
     sys.exit(app.exec())
 

@@ -251,16 +251,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------#
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self)
-        if dlg.exec() == dlg.accepted:
-            # обновляем настройки и LLM-маршрут
-            self.settings = Settings.load()
-            if self.settings.model_provider == "local":
-                import_module("ai_design_assistant.api.local_backend")
-            self.router = LLMRouter(default=self.settings.model_provider)
-
-            # перезагружаем тему
-            style = load_stylesheet(self.settings.theme)
-            QApplication.instance().setStyleSheet(style)
+        dlg.exec()  # reload_settings() вызовется из accept()
 
     # ------------------------------------------------------------------#
     # Chat-session helpers
@@ -425,6 +416,41 @@ class MainWindow(QMainWindow):
         widget = self._tabs.widget(index)
         if widget is self.gallery_panel:
             self.gallery_panel.refresh()
+
+
+
+    def reload_settings(self) -> None:
+        """Перезагрузить настройки и пересоздать router."""
+        from importlib import import_module, reload
+        from ai_design_assistant.core.models import LLMRouter, register_backend, _BACKENDS
+
+        self.settings = Settings.load()
+
+        # 🧹 убираем старые бекенды
+        _BACKENDS.clear()
+
+        # ── загружаем (или перезагружаем) нужный модуль ──────────────────
+        name = self.settings.model_provider
+        module_path = f"ai_design_assistant.api.{name}_backend"
+        mod = import_module(module_path)
+        # если модуль уже импортирован → перезагрузим, чтобы сработал register_backend
+        if name in sys.modules:
+            mod = reload(mod)
+
+        # на всякий случай регистрируем явно (вдруг модуль не вызвал register сам)
+        if getattr(mod, "backend", None) and mod.backend.name not in _BACKENDS:
+            register_backend(mod.backend)
+
+        # ♻️ пересоздаём роутер
+        self.router = LLMRouter(default=name)
+
+        # ── применяем тему сразу ──
+        self._apply_theme(self.settings.theme)
+
+    def _apply_theme(self, theme: str) -> None:
+        """Загрузить QSS-файл и применить к приложению."""
+        style = load_stylesheet(theme)
+        QApplication.instance().setStyleSheet(style)
 
 
 # ────────────────────────────────────────────────

@@ -162,6 +162,12 @@ class SettingsDialog(QDialog):
 
         super().accept()
 
+        from ai_design_assistant.ui.main_window import get_main_window
+
+        main_win = get_main_window()
+        if main_win is not None:
+            main_win.reload_settings()
+
     # expose read-only for caller (rarely needed)
     @property
     def settings(self) -> Settings:
