@@ -212,3 +212,14 @@ def get_function_descriptions() -> list[dict]:
                 }
             })
     return tools
+
+def call_function_by_name(name: str, **kwargs) -> str:
+    plugin = get_plugin_manager().get(name)
+    if not plugin:
+        raise ValueError(f"Plugin '{name}' not found")
+    try:
+        result = plugin.run(**kwargs)
+        return str(result) if result is not None else "✅ Готово"
+    except Exception as e:
+        return f"❌ Ошибка при выполнении плагина '{name}': {e}"
+

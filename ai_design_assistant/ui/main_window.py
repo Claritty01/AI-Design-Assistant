@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from importlib import import_module
+
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
