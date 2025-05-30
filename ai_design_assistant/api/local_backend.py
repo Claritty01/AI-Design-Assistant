@@ -95,8 +95,6 @@ class _LocalBackend(ModelBackend):
 
     def __init__(self) -> None:
         super().__init__()
-
-        # ── загружаем модель уже после регистрации (можно и до) ──
         self.model = LlavaNextForConditionalGeneration.from_pretrained(
             _MODEL_NAME, torch_dtype=_DTYPE
         ).to(_DEVICE)
@@ -107,15 +105,33 @@ class _LocalBackend(ModelBackend):
 
         _prepare_processor(self.processor)
 
+    def unload_model(self) -> None:
+        """Перевести модель на CPU и освободить VRAM."""
+        if torch.cuda.is_available():
+            used_before = torch.cuda.memory_allocated() / (1024 ** 2)  # в MB
+            self.model.to("cpu")
+            torch.cuda.empty_cache()
+            used_after = torch.cuda.memory_allocated() / (1024 ** 2)
+            _LOGGER.info(f"🔋 Модель выгружена. Память до: {used_before:.2f} MB → после: {used_after:.2f} MB")
+
+    def _maybe_reload_model(self):
+        """Если модель не на устройстве — вернуть обратно на нужное устройство."""
+        if next(self.model.parameters()).device != torch.device(_DEVICE):
+            _LOGGER.info(f"🔄 Перемещаю модель обратно на {_DEVICE}")
+            self.model.to(_DEVICE)
+
     # --- базовый sync-режим (вернуть строку цельным куском) -----------------
     def generate(self, messages: List[dict[str, str]], **kw) -> str:
+        self._maybe_reload_model()
         batch = _build_inputs(self, messages)
         output = self.model.generate(**batch, max_new_tokens=_MAX_TOKENS)
         gen_ids = output[0][batch["input_ids"].shape[1]:]
+        self.unload_model()  # <-- после генерации выгружаем
         return self.tokenizer.decode(gen_ids, skip_special_tokens=True)
 
     # --- потоковая версия (вернёт итератор токенов) --------------------------
     def stream(self, messages: List[dict[str, str]], **kw) -> Iterator[str]:
+        self._maybe_reload_model()
         batch = _build_inputs(self, messages)
 
         streamer = TextIteratorStreamer(
@@ -126,7 +142,11 @@ class _LocalBackend(ModelBackend):
         threading.Thread(
             target=self.model.generate, kwargs=gen_kwargs, daemon=True
         ).start()
-        return streamer
+
+        for token in streamer:
+            yield token
+
+        self.unload_model()  # <-- после стрима выгружаем
 
 
 # Экспортим объект, чтобы api.__init__ смог зарегистрировать бекенд
