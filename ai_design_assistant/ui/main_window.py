@@ -165,7 +165,10 @@ class MainWindow(QMainWindow):
         # keep references to active threads to avoid premature GC
         self._threads: list[QThread] = []
 
-        self.router = LLMRouter()
+        self.settings = Settings.load()
+        if self.settings.model_provider == "local":
+            import_module("ai_design_assistant.api.local_backend")
+        self.router = LLMRouter(default=self.settings.model_provider)
         self.sessions: List[ChatSession] = []
         self.current: Optional[ChatSession] = None
 
@@ -249,8 +252,14 @@ class MainWindow(QMainWindow):
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self)
         if dlg.exec() == dlg.accepted:
-            # reload stylesheet according to saved theme
-            style = load_stylesheet(Settings.load().theme)
+            # обновляем настройки и LLM-маршрут
+            self.settings = Settings.load()
+            if self.settings.model_provider == "local":
+                import_module("ai_design_assistant.api.local_backend")
+            self.router = LLMRouter(default=self.settings.model_provider)
+
+            # перезагружаем тему
+            style = load_stylesheet(self.settings.theme)
             QApplication.instance().setStyleSheet(style)
 
     # ------------------------------------------------------------------#
@@ -314,10 +323,10 @@ class MainWindow(QMainWindow):
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
         worker = GenerateThread(
-            self.router,
+            self.get_router,  # передаём ссылку на функцию, а не сам объект
             list(self.current.messages),
-            self.current._path.parent,  # путь к папке, где images/
-            self.current._path  # путь к .json
+            self.current._path.parent,
+            self.current._path
         )
 
         worker.token_received.connect(self._on_token_received)
@@ -357,6 +366,9 @@ class MainWindow(QMainWindow):
             pass
         thread.deleteLater()
 
+    def get_router(self) -> LLMRouter:
+        return self.router
+
     def _on_attachment(self, path: Path) -> None:
         if not self.current:
             return
@@ -385,11 +397,12 @@ class MainWindow(QMainWindow):
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
 
         worker = GenerateThread(
-            self.router,
+            self.get_router,  # передаём ссылку на функцию, а не сам объект
             list(self.current.messages),
-            self.current._path.parent,  # путь к папке, где images/
-            self.current._path  # путь к .json
+            self.current._path.parent,
+            self.current._path
         )
+
         worker.token_received.connect(self._on_token_received)
         worker.finished.connect(self._on_llm_reply)
         worker.error.connect(self._on_llm_error)

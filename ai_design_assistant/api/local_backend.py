@@ -35,6 +35,9 @@ class _LocalBackend(ModelBackend):
     name = "local"
 
     def __init__(self) -> None:
+        super().__init__()
+
+        # ── загружаем модель уже после регистрации (можно и до) ──
         self.model = LlavaNextForConditionalGeneration.from_pretrained(
             _MODEL_NAME, torch_dtype=_DTYPE
         ).to(_DEVICE)

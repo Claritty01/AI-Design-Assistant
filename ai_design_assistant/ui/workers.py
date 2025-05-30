@@ -5,7 +5,7 @@ ui.workers
 """
 
 from __future__ import annotations
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Callable
 from PyQt6.QtCore import QThread, pyqtSignal
 from pathlib import Path
 
@@ -19,13 +19,12 @@ class GenerateThread(QThread):
     finished = pyqtSignal(str)        # Когда всё завершено
     error = pyqtSignal(str)
 
-    def __init__(self, router: LLMRouter, messages: list, chat_path: Path, chat_json_path: Path):
+    def __init__(self, get_router: Callable[[], LLMRouter], messages: list, chat_path: Path, chat_json_path: Path):
         super().__init__()
-        self.router = router
+        self.get_router = get_router  # Функция вместо объекта router
         self.messages = messages
         self.chat_path = chat_path
-        self.chat_path = chat_path  # для изображений
-        self.chat_json_path = chat_json_path  # для загрузки чата
+        self.chat_json_path = chat_json_path
 
     def run(self):
         try:
@@ -52,7 +51,7 @@ class GenerateThread(QThread):
             full_text = ""
             message = None
 
-            for result in self.router.stream(prepared_messages):
+            for result in self.get_router().stream(prepared_messages):
                 if isinstance(result, str):
                     self.token_received.emit(result)
                     full_text += result

@@ -196,6 +196,14 @@
 # print(assistant.chat(history, image_path="test_image.png"))
 
 
+from importlib import import_module
 from ai_design_assistant.core.models import LLMRouter
-router = LLMRouter()
-print(router.generate([{"role": "user", "content": "Кто написал Евгения Онегина?"}], backend="local"))
+
+# имитируем то, что делает MainWindow
+import_module("ai_design_assistant.api.local_backend")
+router = LLMRouter(default="local")
+
+print(router.backends.keys())        # dict_keys(['openai', 'deepseek', 'local'])
+print(router.generate(
+    [{"role": "user", "content": "Сколько цифр после запятой у числа π?"}]
+))

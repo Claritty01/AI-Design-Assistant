@@ -51,6 +51,7 @@ def normalize(messages: list) -> list[dict[str, str]]:   # noqa: D401
 for _module in (
     "ai_design_assistant.api.openai_backend",
     "ai_design_assistant.api.deepseek_backend",
+    "ai_design_assistant.api.local_backend",
 ):
     try:
         mod = __import__(_module, fromlist=["backend"])
@@ -81,6 +82,9 @@ class LLMRouter:
         name = backend or self._default
         if name not in _BACKENDS:
             raise ValueError(f"Бекенд «{name}» не зарегистрирован")
+
+        _LOGGER.info(f"[CHAT] Используется бэкенд: {name}")
+
         return _BACKENDS[name].generate(messages, **kw)
 
     # потоковая версия; если бекенд не умеет стриминг – возвращаем всё сразу
@@ -91,9 +95,12 @@ class LLMRouter:
         if name not in _BACKENDS:
             raise ValueError(f"Бекенд «{name}» не зарегистрирован")
 
+        _LOGGER.info(f"[STREAM] Используется бэкенд: {name}")
+
         gen = getattr(_BACKENDS[name], "stream", None)
         if callable(gen):
-            yield from gen(messages, **kw)          # настоящий стрим
+            yield from gen(messages, **kw)  # настоящий стрим
         else:
-            yield self._BACKENDS[name].generate(messages, **kw)  # one-shot
+            yield _BACKENDS[name].generate(messages, **kw)  # one-shot
+
 
