@@ -10,8 +10,6 @@ import base64
 from io import BytesIO
 from PIL import Image
 
-import psutil
-import gc
 import torch
 from transformers import (
     LlavaNextForConditionalGeneration,
