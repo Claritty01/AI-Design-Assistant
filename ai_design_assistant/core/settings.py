@@ -75,6 +75,9 @@ class Settings:
     theme: str = "auto"                     # light | dark | auto
     language: str = "en"
 
+    # ========= LLM Options ========= #
+    local_unload_mode: str = "cpu"           # cpu | full
+
     # ========= Plugins ========= #
     plugins_enabled: dict[str, bool] = field(default_factory=dict)
 

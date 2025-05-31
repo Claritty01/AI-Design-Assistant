@@ -10,6 +10,8 @@ import base64
 from io import BytesIO
 from PIL import Image
 
+import psutil
+import gc
 import torch
 from transformers import (
     LlavaNextForConditionalGeneration,
@@ -18,6 +20,8 @@ from transformers import (
 )
 
 import logging
+
+from ai_design_assistant.core.settings import Settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,6 +99,7 @@ class _LocalBackend(ModelBackend):
 
     def __init__(self) -> None:
         super().__init__()
+        self.unload_mode = Settings.load().local_unload_mode
         self.model = LlavaNextForConditionalGeneration.from_pretrained(
             _MODEL_NAME, torch_dtype=_DTYPE
         ).to(_DEVICE)
@@ -106,17 +111,51 @@ class _LocalBackend(ModelBackend):
         _prepare_processor(self.processor)
 
     def unload_model(self) -> None:
-        """Перевести модель на CPU и освободить VRAM."""
-        if torch.cuda.is_available():
-            used_before = torch.cuda.memory_allocated() / (1024 ** 2)  # в MB
-            self.model.to("cpu")
+        unload_mode = Settings.load().local_unload_mode
+
+        if unload_mode == "none":
+            _LOGGER.info(f"🚫 Выгрузка отключена — модель остаётся в VRAM")
+            return
+
+        if unload_mode == "cpu":
+            if torch.cuda.is_available():
+                used_before = torch.cuda.memory_allocated() / (1024 ** 2)
+                self.model.to("cpu")
+                torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+                used_after = torch.cuda.memory_allocated() / (1024 ** 2)
+                _LOGGER.info(f"🔋 Модель выгружена в RAM. VRAM до: {used_before:.2f} MB → после: {used_after:.2f} MB")
+        elif unload_mode == "full":
+            if torch.cuda.is_available():
+                used_before = torch.cuda.memory_allocated() / (1024 ** 2)
+                torch.cuda.empty_cache()
+                _LOGGER.info(f"🗑️ Модель удалена полностью. VRAM было: {used_before:.2f} MB")
+            del self.model
+            del self.processor
+            del self.tokenizer
+            import gc
+            gc.collect()
             torch.cuda.empty_cache()
-            used_after = torch.cuda.memory_allocated() / (1024 ** 2)
-            _LOGGER.info(f"🔋 Модель выгружена. Память до: {used_before:.2f} MB → после: {used_after:.2f} MB")
+            torch.cuda.ipc_collect()
+            self.model = None
 
     def _maybe_reload_model(self):
-        """Если модель не на устройстве — вернуть обратно на нужное устройство."""
-        if next(self.model.parameters()).device != torch.device(_DEVICE):
+        """Перезагрузить модель при необходимости."""
+        if self.model is None:
+            _LOGGER.info("⏳ Загрузка модели с диска...")
+            self.model = LlavaNextForConditionalGeneration.from_pretrained(
+                _MODEL_NAME, torch_dtype=_DTYPE
+            ).to(_DEVICE)
+            _LOGGER.info("✅ Модель загружена.")
+
+            self.processor = AutoProcessor.from_pretrained(_MODEL_NAME)
+            self.tokenizer = self.processor.tokenizer
+            self.model.resize_token_embeddings(len(self.tokenizer))
+
+            _prepare_processor(self.processor)
+
+        elif next(self.model.parameters()).device != torch.device(_DEVICE):
             _LOGGER.info(f"🔄 Перемещаю модель обратно на {_DEVICE}")
             self.model.to(_DEVICE)
 

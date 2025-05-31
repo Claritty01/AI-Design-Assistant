@@ -40,6 +40,13 @@ from ai_design_assistant.core.settings import Settings
 
 _THEME_CHOICES: Final = ["auto", "light", "dark"]
 _PROVIDER_CHOICES: Final = ["openai", "deepseek", "local"]
+_UNLOAD_CHOICES: Final = {
+    "none": "Не выгружать (максимальная скорость)",
+    "cpu": "Выгружать в RAM (экономия VRAM)",
+    "full": "Полная выгрузка (экономия VRAM и RAM)",
+}
+
+
 
 
 class SettingsDialog(QDialog):
@@ -84,6 +91,16 @@ class SettingsDialog(QDialog):
         theme_cb.addItems(_THEME_CHOICES)
         theme_cb.setCurrentText(self._settings.theme)
         g_form.addRow("Theme:", theme_cb)
+
+        # unload mode
+        unload_cb = QComboBox()
+        for key, label in _UNLOAD_CHOICES.items():
+            unload_cb.addItem(label, userData=key)
+
+        current_mode = self._settings.local_unload_mode
+        index = list(_UNLOAD_CHOICES.keys()).index(current_mode)
+        unload_cb.setCurrentIndex(index)
+        g_form.addRow("Unload mode:", unload_cb)
 
         # === API-keys tab === #
         api_w = QWidget()
@@ -137,6 +154,7 @@ class SettingsDialog(QDialog):
         self._openai_le = openai_le
         self._deepseek_le = deepseek_le
         self._plugin_cbs = checkboxes
+        self._unload_cb = unload_cb
 
     # ------------------------------------------------------------------#
     #  Accept / save                                                    #
@@ -150,6 +168,7 @@ class SettingsDialog(QDialog):
             raw_path = raw_path.parent
 
         self._settings.chats_path = str(raw_path)
+        self._settings.local_unload_mode = self._unload_cb.currentData()
         self._settings.chats_path = self._chats_le.text().strip()
         self._settings.model_provider = self._model_cb.currentText()
         self._settings.theme = self._theme_cb.currentText()
