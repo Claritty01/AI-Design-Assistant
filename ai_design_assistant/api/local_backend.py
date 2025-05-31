@@ -97,18 +97,21 @@ class _LocalBackend(ModelBackend):
 
     def __init__(self) -> None:
         super().__init__()
-        self.unload_mode = Settings.load().local_unload_mode
-        self.model = LlavaNextForConditionalGeneration.from_pretrained(
-            _MODEL_NAME, torch_dtype=_DTYPE
-        ).to(_DEVICE)
 
-        self.processor = AutoProcessor.from_pretrained(_MODEL_NAME)
-        self.tokenizer = self.processor.tokenizer
-        self.model.resize_token_embeddings(len(self.tokenizer))
+        # Настройка, которую пользователь задаёт в Settings
+        self.unload_mode = Settings.load().local_unload_mode   # 'none' | 'cpu' | 'full'
 
-        _prepare_processor(self.processor)
+        # Ничего тяжёлого здесь не создаём — всё появится в _maybe_reload_model()
+        self.model: LlavaNextForConditionalGeneration | None = None
+        self.processor: AutoProcessor | None = None
+        self.tokenizer = None
 
     def unload_model(self) -> None:
+        # Модель ещё не загружали — выгружать нечего
+        if self.model is None:
+            _LOGGER.debug("unload_model(): модель ещё не загружалась – пропускаю")
+            return
+
         unload_mode = Settings.load().local_unload_mode
 
         if unload_mode == "none":
