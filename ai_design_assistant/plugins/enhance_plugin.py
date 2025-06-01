@@ -9,7 +9,23 @@ from torchvision.transforms.functional import to_tensor, to_pil_image
 from datetime import datetime
 
 from ai_design_assistant.core.plugins import BaseImagePlugin
-from .tools.SwinIR.models.network_swinir import SwinIR
+
+import logging, warnings
+
+# -----------------------------------------------------------------------------
+# ЛОГИ И ПРЕДУПРЕЖДЕНИЯ
+# -----------------------------------------------------------------------------
+_LOGGER = logging.getLogger(__name__)
+
+# timm > 0.9 переехал; глушим FutureWarning “please import via timm.layers”
+warnings.filterwarnings("ignore",
+                        category=FutureWarning,
+                        module=r"timm\.models\.layers")
+
+# Torch 2.3 ругается, что скоро meshgrid потребует indexing='ij'
+warnings.filterwarnings("ignore",
+                        category=UserWarning,
+                        message=r"torch\.meshgrid")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -128,29 +144,112 @@ class EnhancePlugin(BaseImagePlugin):
         return EnhanceTabs()
 
 
+# -----------------------------------------------------------------------------
+# LAZY-LOADER ДЛЯ SWINIR
+# -----------------------------------------------------------------------------
+_MODEL_CACHE: dict[str, torch.nn.Module] = {}
+
+def get_swinir(level: str) -> torch.nn.Module:
+    """
+    Возвращает готовую к инференсу модель SwinIR.
+    Повторные вызовы отдают кэш — веса грузятся один раз за сессию.
+    """
+    if level in _MODEL_CACHE:
+        return _MODEL_CACHE[level]
+
+    from .tools.SwinIR.models.network_swinir import SwinIR  # импорт внутри функции
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if level == "Быстрая":
+        from .tools.SwinIR.models.network_swinir import SwinIR
+        model = SwinIR(
+            upscale=2,
+            in_chans=3,
+            img_size=64,
+            window_size=8,
+            img_range=1.0,
+            # depths=[6, 6, 6, 6],
+            depths=[6, 6, 6, 6, 6, 6],
+            embed_dim=180,
+            # embed_dim=60,
+            # num_heads=[6, 6, 6, 6],
+            num_heads=[6, 6, 6, 6, 6, 6],
+            mlp_ratio=2,
+            # upsampler="pixelshuffledirect",
+            upsampler="nearest+conv",
+            resi_connection="1conv"
+        )
+        # weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+
+    elif level == "Глубокая":
+        from .tools.SwinIR.models.network_swinir import SwinIR
+        model = SwinIR(
+            upscale=2,
+            in_chans=3,
+            img_size=64,
+            window_size=8,
+            img_range=1.0,
+            depths=[6, 6, 6, 6, 6, 6],
+            embed_dim=180,
+            num_heads=[6, 6, 6, 6, 6, 6],
+            mlp_ratio=2,
+            upsampler="nearest+conv",
+            resi_connection="1conv"
+        )
+        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+
+    else:  # Стандартная
+        from .tools.SwinIR.models.network_swinir import SwinIR
+        model = SwinIR(
+            upscale=2,
+            in_chans=3,
+            img_size=64,
+            window_size=8,
+            img_range=1.0,
+            depths=[6, 6, 6, 6, 6, 6],
+            embed_dim=180,
+            num_heads=[6, 6, 6, 6, 6, 6],
+            mlp_ratio=2,
+            upsampler="nearest+conv",
+            # upsampler="pixelshuffle",
+            resi_connection="1conv"
+        )
+        # weights = Path("plugins/tools/SwinIR/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth")
+        weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
+
+    state = torch.load(weights, map_location=device)
+    model.load_state_dict(state["params"] if "params" in state else state, strict=True)
+    model.eval().to(device)
+
+    _LOGGER.info("[%s] Загружено параметров: %.2f M", level,
+                 sum(p.numel() for p in model.parameters()) / 1e6)
+
+    _MODEL_CACHE[level] = model            # кладём в кэш
+    return model
+
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # UI
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ────────── EnhanceTabs ──────────
 class EnhanceTabs(QWidget):
     def __init__(self):
         super().__init__()
+
         self.combo = QComboBox()
         self.combo.addItems(["Быстрая", "Стандартная", "Глубокая"])
         self.combo.currentIndexChanged.connect(self._reload_model)
 
-        initial_level = self.combo.currentText()
-        self.model = self._init_model(initial_level)
+        self.model = None  # ← пока модели нет
 
-        self.full = EnhanceSubWidget(self.model, tiled=False)
-        self.tiled = EnhanceSubWidget(self.model, tiled=True)
+        self.full  = EnhanceSubWidget(self, tiled=False)
+        self.tiled = EnhanceSubWidget(self, tiled=True)
 
         self.tabs = QTabWidget()
-
-        self.full = EnhanceSubWidget(self.model, tiled=False)
-        self.tiled = EnhanceSubWidget(self.model, tiled=True)
-
-        self.tabs.addTab(self.full, "Обычное улучшение")
+        self.tabs.addTab(self.full,  "Обычное улучшение")
         self.tabs.addTab(self.tiled, "Поштучное улучшение")
 
         layout = QVBoxLayout(self)
@@ -158,96 +257,26 @@ class EnhanceTabs(QWidget):
         layout.addWidget(self.combo)
         layout.addWidget(self.tabs)
 
+    def _reload_model(self):
+        self.model = None  # сбрасываем модель — при следующем запуске подгрузится свежая
 
     def set_chat_folder(self, folder: str):
         self.full.set_chat_folder(folder)
         self.tiled.set_chat_folder(folder)
 
-    def _reload_model(self):
-        level = self.combo.currentText()
-        self.model = self._init_model(level)
-        self.full.model = self.model
-        self.tiled.model = self.model
-
-    def _init_model(self, level: str) -> torch.nn.Module:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        if level == "Быстрая":
-            from .tools.SwinIR.models.network_swinir import SwinIR
-            model = SwinIR(
-                upscale=2,
-                in_chans=3,
-                img_size=64,
-                window_size=8,
-                img_range=1.0,
-                #depths=[6, 6, 6, 6],
-                depths=[6, 6, 6, 6, 6, 6],
-                embed_dim=180,
-                #embed_dim=60,
-                #num_heads=[6, 6, 6, 6],
-                num_heads=[6, 6, 6, 6, 6, 6],
-                mlp_ratio=2,
-                #upsampler="pixelshuffledirect",
-                upsampler="nearest+conv",
-                resi_connection="1conv"
-            )
-            #weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
-            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
-
-
-        elif level == "Глубокая":
-            from .tools.SwinIR.models.network_swinir import SwinIR
-            model = SwinIR(
-                upscale=2,
-                in_chans=3,
-                img_size=64,
-                window_size=8,
-                img_range=1.0,
-                depths=[6, 6, 6, 6, 6, 6],
-                embed_dim=180,
-                num_heads=[6, 6, 6, 6, 6, 6],
-                mlp_ratio=2,
-                upsampler="nearest+conv",
-                resi_connection="1conv"
-            )
-            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
-
-        else:  # Стандартная
-            from .tools.SwinIR.models.network_swinir import SwinIR
-            model = SwinIR(
-                upscale=2,
-                in_chans=3,
-                img_size=64,
-                window_size=8,
-                img_range=1.0,
-                depths=[6, 6, 6, 6, 6, 6],
-                embed_dim=180,
-                num_heads=[6, 6, 6, 6, 6, 6],
-                mlp_ratio=2,
-                upsampler="nearest+conv",
-                #upsampler="pixelshuffle",
-                resi_connection="1conv"
-            )
-            #weights = Path("plugins/tools/SwinIR/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth")
-            weights = Path("plugins/tools/SwinIR/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth")
-
-        state_dict = torch.load(weights, map_location=device)
-        try:
-            model.load_state_dict(state_dict["params"] if "params" in state_dict else state_dict, strict=True)
-            print(f"[{level}] Загружено параметров: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
-        except RuntimeError as e:
-            print(f"❌ Ошибка при загрузке модели [{level}]:", e)
-
-        model.eval().to(device)
-        return model
+    def get_model(self):
+        if self.model is None:
+            level = self.combo.currentText()
+            self.model = get_swinir(level)
+        return self.model
 
 
 class EnhanceSubWidget(QWidget):
     THUMB_SIZE = QSize(80, 80)
 
-    def __init__(self, model: torch.nn.Module, tiled: bool):
+    def __init__(self, parent: EnhanceTabs, tiled: bool):
         super().__init__()
-        self.model = model
+        self.parent = parent
         self.tiled = tiled
         self.selected_path: Path | None = None
         self.current_folder: Path | None = None
@@ -317,11 +346,11 @@ class EnhanceSubWidget(QWidget):
         self.label.setText("Обработка...")
 
         self.thread = QThread(self)
+        model = self.parent.get_model()
         if self.tiled:
-            self.worker = SwinIRWorkerTiled(str(self.selected_path), self.model, tile_size=256)
-            self.worker.progress.connect(self.progress.setValue)
+            self.worker = SwinIRWorkerTiled(str(self.selected_path), model, tile_size=256)
         else:
-            self.worker = SwinIRWorkerFull(str(self.selected_path), self.model)
+            self.worker = SwinIRWorkerFull(str(self.selected_path), model)
 
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
@@ -342,9 +371,9 @@ class EnhanceSubWidget(QWidget):
         self.label.setText("Готово!")
         self.btn_run.setEnabled(True)
 
+    # ────────── EnhanceSubWidget._on_error ──────────
     def _on_error(self, msg: str) -> None:
-        print("❌ Ошибка в потоке:", msg)  # ← вывод в консоль
-        logger.error("❌ Ошибка в потоке: %s", msg)
+        _LOGGER.error("Ошибка в потоке: %s", msg)
         QMessageBox.critical(self, "Ошибка", msg)
         self.progress.setVisible(False)
         self.label.setText("Ошибка.")
