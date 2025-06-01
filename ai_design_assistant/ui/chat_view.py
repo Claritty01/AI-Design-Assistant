@@ -1,5 +1,5 @@
 # ai_design_assistant/ui/chat_view.py
-from PyQt6.QtCore import Qt  # ← главный импорт
+from PyQt6.QtCore import Qt, QPropertyAnimation, QTimer  # ← главный импорт
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QHBoxLayout, QLabel
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from typing import Optional
@@ -38,6 +38,9 @@ class ChatView(QWidget):
         self.setAcceptDrops(True)
         self._init_ui()
 
+        # Анимация скроллинга
+        self.scroll_anim = QPropertyAnimation()
+
     def _init_ui(self):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -54,6 +57,7 @@ class ChatView(QWidget):
         self.message_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # ← исправлено
         self.message_layout.setSpacing(10)
         self.message_layout.setContentsMargins(20, 20, 20, 20)
+        self.message_layout.addStretch(1)
 
         self.scroll_area.setWidget(self.message_container)
 
@@ -62,12 +66,46 @@ class ChatView(QWidget):
         main_layout.addWidget(self.scroll_area)
         self.setLayout(main_layout)
 
-    def add_message(self, text: str, is_user: bool, image: Optional[str] = None) -> MessageBubble:
-        bubble = MessageBubble(markdown_to_html(text), is_user, image=image, parent=self.message_container)
+        bar = self.scroll_area.verticalScrollBar()
+        bar.rangeChanged.connect(lambda *_: self._maybe_auto_scroll())
 
+        # флаг, чтобы не мешать пользователю, когда он листает вверх
+        self._auto_scroll = True
+        bar.valueChanged.connect(self._detect_user_scroll)
+
+    def _detect_user_scroll(self, val: int) -> None:
+        bar = self.scroll_area.verticalScrollBar()
+        delta = bar.maximum() - val
+
+        if self._auto_scroll:
+            # Если автоскролл был включен, но пользователь ушёл вверх — отключаем
+            if delta > 4:
+                self._auto_scroll = False
+        else:
+            # Если автоскролл был выключен, но пользователь вернулся вниз — включаем
+            if delta < 4:
+                self._auto_scroll = True
+
+    def _maybe_auto_scroll(self):
+        if self._auto_scroll:
+            self.scroll_to_bottom()
+
+    def _last_bubble(self) -> Optional[MessageBubble]:
+        # Идём с конца, пропуская спейсер
+        for i in range(self.message_layout.count() - 1, -1, -1):
+            w = self.message_layout.itemAt(i).widget()
+            if isinstance(w, MessageBubble):
+                return w
+        return None
+
+    def add_message(self, text: str, is_user: bool, image: Optional[str] = None) -> MessageBubble:
+        bubble = MessageBubble(markdown_to_html(text), is_user, image=image,
+                               parent=self.message_container)
         self.message_layout.addWidget(bubble)
 
-        self.scroll_to_bottom()
+        if self._auto_scroll:  # ← добавили условие
+            QTimer.singleShot(0, self.scroll_to_bottom)
+
         return bubble
 
     def add_user(self, text: str):
@@ -77,16 +115,19 @@ class ChatView(QWidget):
         self.add_message(text, is_user=False)
 
     def add_assistant_token(self, token: str):
-        if not self.message_layout.count():
-            self.add_assistant(token)
+        last_bubble = self._last_bubble()
+
+        # Если ещё нет ни одного сообщения ИИ – создаём
+        if last_bubble is None or last_bubble.is_user:
+            last_bubble = self.add_message(token, is_user=False)
             return
 
-        last_item = self.message_layout.itemAt(self.message_layout.count() - 1)
-        if last_item and isinstance(last_item.widget(), MessageBubble):
-            last_bubble = last_item.widget()
-            if not last_bubble.is_user:
-                last_bubble.label.setText(last_bubble.label.text() + token)
-                self.scroll_area.ensureWidgetVisible(last_bubble)
+        # Дописываем токен в существующий пузырёк
+        last_bubble.label.setText(last_bubble.label.text() + token)
+
+        # СКРОЛЛИТЬ ТОЛЬКО ЕСЛИ ПОЛЬЗОВАТЕЛЬ НЕ УШЕЛ ВВЕРХ
+        if self._auto_scroll:
+            QTimer.singleShot(0, self.scroll_to_bottom)
 
     def clear(self):
         while self.message_layout.count():
@@ -95,8 +136,18 @@ class ChatView(QWidget):
                 item.widget().deleteLater()
 
     def scroll_to_bottom(self) -> None:
-        """Прокручивает чат до последнего сообщения."""
-        self.scroll_area.ensureWidgetVisible(self.message_container)
+        """Плавно прокручивает чат до самого низа."""
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        scroll_bar.setValue(scroll_bar.maximum())
 
     def message_count(self) -> int:
         return self.message_layout.count()
+
+    def clear(self):
+        while self.message_layout.count():
+            item = self.message_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        # добавляем спейсер заново
+        self.message_layout.addStretch(1)
+
