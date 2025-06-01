@@ -13,7 +13,8 @@ from ai_design_assistant.core.plugins import get_function_descriptions, call_fun
 
 _API_KEY = os.getenv("OPENAI_API_KEY")
 if not _API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set")
+    raise ImportError("OPENAI_API_KEY missing – backend disabled")
+
 
 _VER = version.parse(openai.__version__)
 _IS_NEW = _VER.major >= 1  # True для 1.x, 2.x …
@@ -231,3 +232,8 @@ class _OpenAIBackend(ModelBackend):
 
 
 backend = _OpenAIBackend()
+
+def summarize_chat(prompt: str) -> str:
+    """Суммаризация чата через OpenAI."""
+    messages = [{"role": "user", "content": prompt}]
+    return backend.generate(messages)

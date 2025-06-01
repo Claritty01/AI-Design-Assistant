@@ -11,7 +11,8 @@ from typing import Final, Literal, Optional, Iterable
 import tempfile
 
 from platformdirs import user_data_dir
-from ai_design_assistant.core.settings import get_chats_directory
+
+from ai_design_assistant.core.settings import get_chats_directory, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,43 @@ class ChatSession:
             except (FileExistsError, PermissionError) as e:
                 logger.warning(f"Проблема с {chat_dir}: {e}")
                 next_num += 1
+
+    def summarize_chat(self) -> str:
+        """Придумать короткое (< 10 слов) название по первым двум репликам."""
+        user_msgs = [m.content for m in self.messages if m.role == "user"]
+        if len(user_msgs) < 2:
+            return self.title               # данных мало – выходим
+
+        prompt = (
+            "Сформулируй короткое (до 10 слов) название этого диалога:\n\n"
+            f"{user_msgs[0]}\n{user_msgs[1]}"
+        )
+
+        settings = Settings.load()
+        backend_name = settings.model_provider      # openai / local / deepseek
+
+        try:
+            if backend_name == "local":
+                from ai_design_assistant.api.local_backend import summarize_chat as do_sum
+            elif backend_name == "openai":
+                from ai_design_assistant.api.openai_backend import summarize_chat as do_sum
+            elif backend_name == "deepseek":
+                from ai_design_assistant.api.deepseek_backend import summarize_chat as do_sum
+            else:
+                raise ValueError(f"Unknown backend {backend_name}")
+
+            summary = do_sum(prompt)                # ← основной вызов
+        except Exception as e:                       # <-- страховка
+            logger.warning("summarization failed: %s", e)
+            # fallback: первые 10 слов 1-го сообщения
+            summary = " ".join(user_msgs[0].split()[:10])
+
+        # ограничиваем длину
+        summary = " ".join(summary.strip().split()[:10])
+
+        self.title = summary or _DEFAULT_TITLE
+        self.save()
+        return self.title
 
 
 # ─────────────────────────────────────────────────────────────────────────────

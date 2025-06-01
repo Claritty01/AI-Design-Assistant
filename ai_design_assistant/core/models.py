@@ -55,11 +55,11 @@ for _module in (
 ):
     try:
         mod = __import__(_module, fromlist=["backend"])
-        register_backend(mod.backend)  # каждый модуль обязан экспонировать .backend
-    except ModuleNotFoundError:
-        _LOGGER.info("Optional backend %s не найден — пропускаю", _module)
-    except Exception as exc:  # pragma: no cover
-        _LOGGER.warning("Не удалось инициализировать %s: %s", _module, exc)
+        if getattr(mod, "backend", None):          # backend реально есть?
+            register_backend(mod.backend)
+    except Exception as exc:                       # ← один общий трай
+        _LOGGER.warning("Backend %s not registered: %s", _module, exc)
+
 
 
 # ────────────────────────────────────────────────────────────────────

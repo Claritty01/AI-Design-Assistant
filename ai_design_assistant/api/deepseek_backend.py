@@ -17,3 +17,7 @@ class _DeepSeekBackend(ModelBackend):
         raise NotImplementedError("DeepSeek SDK ещё не подключён")
 
 backend = _DeepSeekBackend()
+
+def summarize_chat(prompt: str) -> str:
+    """Суммаризация чата через DeepSeek (заглушка)."""
+    raise NotImplementedError("DeepSeek пока не поддерживает суммаризацию в нашем приложении.")

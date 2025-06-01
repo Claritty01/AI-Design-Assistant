@@ -33,7 +33,7 @@ from urllib.parse import urlparse, unquote
 # ────────────────────────────────────────────────
 #  internal imports
 # ────────────────────────────────────────────────
-from ai_design_assistant.core.chat import ChatSession, Message
+from ai_design_assistant.core.chat import ChatSession, Message, _DEFAULT_TITLE
 from ai_design_assistant.core.models import LLMRouter
 from ai_design_assistant.core.plugins import get_plugin_manager
 from ai_design_assistant.core.settings import Settings
@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
         session = ChatSession.create_new()
         self.sessions.append(session)
 
-        item = QListWidgetItem("Chat " + session.uuid[:6])
+        item = QListWidgetItem(session.title)
         item.setData(Qt.ItemDataRole.UserRole, session)
         self.chat_list.addItem(item)
         self.chat_list.setCurrentItem(item)
@@ -304,11 +304,17 @@ class MainWindow(QMainWindow):
         self.chat_view.add_message(text, is_user=True, image=str(image_path) if image_path else None)
         self.gallery_panel.refresh()
 
+        # Проверка и суммаризация
+        user_msgs = [m for m in self.current.messages if m.role == "user"]
+        if len(user_msgs) == 2 and self.current.title == _DEFAULT_TITLE:
+            new_title = self.current.summarize_chat()
+            if (item := self.chat_list.currentItem()):
+                item.setText(new_title)
+
         # guard: only one generation at a time
         if any(t.isRunning() for t in self._threads):
             QMessageBox.warning(self, "Wait", "The model is still responding…")
             return
-
         assistant_bubble = self.chat_view.add_message("", is_user=False)
         self.gallery_panel.refresh()
         self.current.assistant_bubble = assistant_bubble  # type: ignore[attr-defined]
@@ -403,9 +409,11 @@ class MainWindow(QMainWindow):
         self._threads.append(worker)
 
     def _load_chats(self) -> None:
+        """Заполняем левую колонку уже существующими чатами."""
         for session in ChatSession.load_all():
             self.sessions.append(session)
-            item = QListWidgetItem("Chat " + session.uuid[:6])
+
+            item = QListWidgetItem(session.title)  # ← создаём item
             item.setData(Qt.ItemDataRole.UserRole, session)
             self.chat_list.addItem(item)
 

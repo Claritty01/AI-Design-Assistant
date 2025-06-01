@@ -191,3 +191,8 @@ class _LocalBackend(ModelBackend):
 
 # Экспортим объект, чтобы api.__init__ смог зарегистрировать бекенд
 backend = _LocalBackend()
+
+def summarize_chat(prompt: str) -> str:
+    """Суммаризация чата через локальную модель."""
+    messages = [{"role": "user", "content": prompt}]
+    return backend.generate(messages)
