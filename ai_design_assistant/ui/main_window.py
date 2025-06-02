@@ -166,8 +166,8 @@ class MainWindow(QMainWindow):
         self._threads: list[QThread] = []
 
         self.settings = Settings.load()
-        if self.settings.model_provider == "local":
-            import_module("ai_design_assistant.api.local_backend")
+        if self.settings.model_provider.startswith("local"):
+            import_module(f"ai_design_assistant.api.{self.settings.model_provider}_backend")
         self.router = LLMRouter(default=self.settings.model_provider)
         self.sessions: List[ChatSession] = []
         self.current: Optional[ChatSession] = None
@@ -347,6 +347,17 @@ class MainWindow(QMainWindow):
             return
         final_text = self.current.assistant_bubble.label.text()
         self.current.messages.append(Message(role="assistant", content=final_text))
+        # ── обновляем заголовок, если уже есть ≥ 2 user-сообщений ──────────
+        if sum(1 for m in self.current.messages if m.role == "user") >= 2:
+            new_title = self.current.summarize_chat()
+
+            # ищем соответствующий QListWidgetItem и меняем текст
+            for i in range(self.chat_list.count()):
+                item = self.chat_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) is self.current:
+                    item.setText(new_title)
+                    break
+
         self.current.save()
         delattr(self.current, "assistant_bubble")
 

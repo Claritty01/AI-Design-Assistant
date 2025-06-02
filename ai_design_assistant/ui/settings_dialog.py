@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
 from ai_design_assistant.core.settings import Settings
 
 _THEME_CHOICES: Final = ["auto", "light", "dark"]
-_PROVIDER_CHOICES: Final = ["openai", "deepseek", "local"]
+_PROVIDER_CHOICES: Final = ["openai", "deepseek", "local", "local_qwen25"]
 _UNLOAD_CHOICES: Final = {
     "none": "Не выгружать (максимальная скорость)",
     "cpu": "Выгружать в RAM (экономия VRAM)",

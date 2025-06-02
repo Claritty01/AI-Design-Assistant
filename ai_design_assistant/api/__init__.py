@@ -5,7 +5,7 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
-for _name in ("openai_backend", "deepseek_backend", "local_backend"):
+for _name in ("openai_backend", "deepseek_backend", "local_backend", "local_qwen25_backend"):
     try:
         import_module(f"{__name__}.{_name}")
     except Exception as exc:            # noqa: BLE001

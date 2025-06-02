@@ -10,9 +10,8 @@ from typing import Final, Literal, Optional, Iterable
 
 import tempfile
 
-from platformdirs import user_data_dir
-
 from ai_design_assistant.core.settings import get_chats_directory, Settings
+from ai_design_assistant.core.summarizers import textrank_title
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +48,14 @@ class ChatSession:
         msg = Message(role=role, content=content)
         self.messages.append(msg)
         self.save()
+
+        # ➜ если это вторая реплика пользователя – пробуем придумать заголовок
+        if role == "user" and sum(m.role == "user" for m in self.messages) == 2:
+            try:
+                self.summarize_chat()
+            except Exception as e:
+                logger.warning("title-gen failed: %s", e)
+
         return msg
 
     def add_image_message(self, role: str, content: str, image_path: str) -> Message:
@@ -229,18 +236,28 @@ class ChatSession:
                 next_num += 1
 
     def summarize_chat(self) -> str:
-        """Придумать короткое (< 10 слов) название по первым двум репликам."""
-        user_msgs = [m.content for m in self.messages if m.role == "user"]
-        if len(user_msgs) < 2:
-            return self.title               # данных мало – выходим
+        """Придумать короткое (< 10 слов) название по первым 2-4 репликам диалога."""
+        # Берём первые 4 сообщения (user + assistant вперемешку)
+        dialog_msgs = [m.content for m in self.messages if m.role in ("user", "assistant")]
+        if len(dialog_msgs) < 2:
+            return self.title
 
+        try:
+            summary = textrank_title(dialog_msgs[:4])  # 4 реплики вместо 2
+            self.title = summary
+            self.save()
+            return self.title
+        except Exception as e:
+            logger.warning("Local summarizer failed: %s", e)
+
+        # Fallback
         prompt = (
-            "Сформулируй короткое (до 10 слов) название этого диалога:\n\n"
-            f"{user_msgs[0]}\n{user_msgs[1]}"
+                "Сформулируй короткое (до 10 слов) название этого диалога:\n\n"
+                + "\n".join(dialog_msgs[:4])
         )
 
         settings = Settings.load()
-        backend_name = settings.model_provider      # openai / local / deepseek
+        backend_name = settings.model_provider
 
         try:
             if backend_name == "local":
@@ -252,15 +269,12 @@ class ChatSession:
             else:
                 raise ValueError(f"Unknown backend {backend_name}")
 
-            summary = do_sum(prompt)                # ← основной вызов
-        except Exception as e:                       # <-- страховка
-            logger.warning("summarization failed: %s", e)
-            # fallback: первые 10 слов 1-го сообщения
-            summary = " ".join(user_msgs[0].split()[:10])
+            summary = do_sum(prompt)
+        except Exception as e:
+            logger.warning("Summarization failed: %s", e)
+            summary = " ".join(dialog_msgs[0].split()[:10])
 
-        # ограничиваем длину
         summary = " ".join(summary.strip().split()[:10])
-
         self.title = summary or _DEFAULT_TITLE
         self.save()
         return self.title

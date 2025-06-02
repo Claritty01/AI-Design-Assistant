@@ -52,6 +52,7 @@ for _module in (
     "ai_design_assistant.api.openai_backend",
     "ai_design_assistant.api.deepseek_backend",
     "ai_design_assistant.api.local_backend",
+    "ai_design_assistant.api.local_qwen25_backend"
 ):
     try:
         mod = __import__(_module, fromlist=["backend"])

@@ -195,15 +195,24 @@
 # history = [{"role": "user", "content": "Что на фото? Можно ли его как-то улучшить?"}]
 # print(assistant.chat(history, image_path="test_image.png"))
 
+#
+# from importlib import import_module
+# from ai_design_assistant.core.models import LLMRouter
+#
+# # имитируем то, что делает MainWindow
+# import_module("ai_design_assistant.api.local_backend")
+# router = LLMRouter(default="local")
+#
+# print(router.backends.keys())        # dict_keys(['openai', 'deepseek', 'local'])
+# print(router.generate(
+#     [{"role": "user", "content": "Сколько цифр после запятой у числа π?"}]
+# ))
 
-from importlib import import_module
-from ai_design_assistant.core.models import LLMRouter
+import torch
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
-# имитируем то, что делает MainWindow
-import_module("ai_design_assistant.api.local_backend")
-router = LLMRouter(default="local")
+model_name = "Qwen/Qwen2.5-VL-3B-Instruct"
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16).to("cuda")
+processor = AutoProcessor.from_pretrained(model_name)
 
-print(router.backends.keys())        # dict_keys(['openai', 'deepseek', 'local'])
-print(router.generate(
-    [{"role": "user", "content": "Сколько цифр после запятой у числа π?"}]
-))
+print("✅ Модель успешно загружена!")
