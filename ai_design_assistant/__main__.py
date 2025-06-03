@@ -1,4 +1,4 @@
-"""Application entry point for AI Design Assistant.
+"""Application entry point for AI Design Assistant.
 
 Responsible for:
 * loading environment variables (via Settings.load_dotenv)
