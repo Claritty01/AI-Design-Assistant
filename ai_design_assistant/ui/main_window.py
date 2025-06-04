@@ -83,6 +83,7 @@ class InputBar(QWidget):
         self.text_edit.sendRequested.connect(self._emit_send)
 
         self.attach_btn = QPushButton("📎", self)
+        self.attach_btn.setObjectName("upload_button")
         self.attach_btn.setFixedWidth(30)
         self.attach_btn.clicked.connect(self._attach_image)
 
