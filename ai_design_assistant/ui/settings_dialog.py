@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from huggingface_hub import snapshot_download
 from PyQt6.QtWidgets import QMessageBox
-import os
 
 
 from pathlib import Path
@@ -60,7 +59,6 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Preferences")
         self.setMinimumWidth(420)
         self._settings = Settings.load()
-        self._download_button = None
 
         # ──────────────────────────────────────────────────────────────#
         #  Layout scaffolding                                           #
@@ -92,11 +90,21 @@ class SettingsDialog(QDialog):
         model_cb.addItems(_PROVIDER_CHOICES)
         model_cb.setCurrentText(self._settings.model_provider)
 
-        model_cb.currentTextChanged.connect(self._update_download_button)
+        model_cb.currentTextChanged.connect(self._update_download_row)
         g_form.addRow("Model provider:", model_cb)
+
+        # — Строка "Model download" (по умолчанию скрыта)
+        self._download_label = QLabel("Model download:")
+        self._download_btn = QPushButton()  # текст выставим позже
+
+        g_form.addRow(self._download_label, self._download_btn)
+        self._download_label.hide()
+        self._download_btn.hide()
+
+        self._pending_model_id: str | None = None  # что именно будем качать
+
         self._model_cb = model_cb  # нужно для доступа внутри update
-        self._model_form = g_form  # нужно для динамического добавления кнопки
-        self._update_download_button(model_cb.currentText())
+        self._update_download_row(model_cb.currentText())
 
         theme_cb = QComboBox()
         theme_cb.addItems(_THEME_CHOICES)
@@ -212,30 +220,50 @@ class SettingsDialog(QDialog):
         try:
             snapshot_download(repo_id=model_id, local_dir=None)
             QMessageBox.information(self, "Model downloaded", f"{model_id} successfully downloaded.")
-            self.close()
+            self._update_download_row(self._model_cb.currentText())   # скрыть кнопку
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to download {model_id}:\n{e}")
 
-    def _update_download_button(self, provider: str) -> None:
+    def _update_download_row(self, provider: str) -> None:
+        """Показать или скрыть кнопку, если локальная модель не скачана."""
         model_id_map = {
             "local": "neulab/Pangea-7B-hf",
-            "local_qwen25": "Qwen/Qwen2.5-VL-3B-Instruct"
+            "local_qwen25": "Qwen/Qwen2.5-VL-3B-Instruct",
         }
 
-        # Удаляем старую кнопку, если есть
-        if self._download_button:
-            self._download_button.setParent(None)
-            self._download_button.deleteLater()
-            self._download_button = None
+        # скрываем строку по умолчанию
+        self._download_label.hide()
+        self._download_btn.hide()
+        self._pending_model_id = None
 
-        # Если выбрана локальная модель и она не скачана — создаём кнопку
+        # безопасно отключаем старый слот
+        try:
+            self._download_btn.clicked.disconnect()
+        except TypeError:
+            pass
+
+        # если выбрана локальная модель и файлов ещё нет – показать кнопку
         if provider in model_id_map:
             model_id = model_id_map[provider]
             if not self._is_model_downloaded(model_id):
-                btn = QPushButton(f"📥 Download {model_id}")
-                btn.clicked.connect(lambda: self._download_model(model_id))
-                self._download_button = btn
-                self._model_form.addRow("Model download:", btn)
+                self._pending_model_id = model_id
+                self._download_btn.setText(f"📥 Download {model_id}")
+                self._download_label.show()
+                self._download_btn.show()
+                self._download_btn.clicked.connect(self._on_download_clicked)
+
+    def _on_download_clicked(self) -> None:
+        """Скачать модель и сразу скрыть кнопку, если всё прошло успешно."""
+        if not self._pending_model_id:
+            return
+        try:
+            snapshot_download(repo_id=self._pending_model_id, local_dir=None)
+            QMessageBox.information(self, "Success",
+                                    f"{self._pending_model_id} downloaded.")
+            # Перепроверяем – модель теперь на месте
+            self._update_download_row(self._model_cb.currentText())
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
 
 # ──────────────────────────────────────────────────────────────────────#
