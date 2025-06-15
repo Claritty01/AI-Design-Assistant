@@ -1,10 +1,11 @@
+import shutil
 from pathlib import Path
 from datetime import datetime
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QMessageBox, QHBoxLayout
+    QMessageBox, QHBoxLayout, QPushButton, QFileDialog
 )
 
 
@@ -22,10 +23,30 @@ class GalleryPanel(QWidget):
         self.gallery.setMinimumHeight(350)
         self.gallery.itemClicked.connect(self.select_image)
 
+        self.add_button = QPushButton("➕ Добавить изображение")
+        self.add_button.clicked.connect(self._on_add_image)
+
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("🖼️ Галерея"))
+        layout.addWidget(self.add_button)
         layout.addWidget(self.gallery, 1)
         self.setLayout(layout)
+
+    def _on_add_image(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Выберите изображение", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+        if not path:
+            return
+
+        dst_folder = Path(self.get_current_chat_folder()) / "images"
+        dst_folder.mkdir(parents=True, exist_ok=True)
+        dst_path = dst_folder / Path(path).name
+
+        if dst_path.exists():
+            QMessageBox.warning(self, "Файл уже существует", f"Файл {dst_path.name} уже есть в галерее.")
+            return
+
+        shutil.copy(path, dst_path)
+        self.refresh()
 
     def refresh(self):
         self.gallery.clear()

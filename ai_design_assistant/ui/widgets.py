@@ -53,6 +53,7 @@ class MessageBubble(QWidget):
                     QSize(256, 256), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
                 ))
                 content_layout.addWidget(img_label)
+                self.has_image = True
 
         self.label = QLabel(text)
         self.label.setStyleSheet("background: transparent; font-size: 14px;")
