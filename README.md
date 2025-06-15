@@ -102,7 +102,7 @@ pytest tests/
 
 ---
 
-# 🎨 AI Design Assistant
+# AI Design Assistant
 
 **AI Design Assistant** is a desktop application built with Python and PyQt6 that helps graphic designers interact with large language models (LLMs) and perform image processing tasks through a plugin system. It combines modern AI models (OpenAI, DeepSeek, Pangea, Qwen, and local models) with a user-friendly interface and practical visual tools.
 
