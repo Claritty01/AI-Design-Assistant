@@ -10,7 +10,6 @@
 #
 # print(torch.cuda.get_device_capability(0))  # Например: (8, 9) для sm_89
 
-
 # from pathlib import Path
 # print("is_file:", Path("ai_design_assistant/data/chats").is_file())
 # print("is_dir:", Path("ai_design_assistant/data/chats").is_dir())
@@ -208,11 +207,35 @@
 #     [{"role": "user", "content": "Сколько цифр после запятой у числа π?"}]
 # ))
 
-import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
-model_name = "Qwen/Qwen2.5-VL-3B-Instruct"
-model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16).to("cuda")
-processor = AutoProcessor.from_pretrained(model_name)
 
-print("✅ Модель успешно загружена!")
+# import torch
+# from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+#
+# model_name = "Qwen/Qwen2.5-VL-3B-Instruct"
+# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16).to("cuda")
+# processor = AutoProcessor.from_pretrained(model_name)
+#
+# print("✅ Модель успешно загружена!")
+
+from ai_design_assistant.api.local_qwen25_backend import backend
+import base64, io
+from PIL import Image
+
+# 1) текст
+print(backend.generate([{"role": "user", "content": "Сколько будет 2+2?"}]))
+
+# 2) 300×300 красный квадрат → data-url
+img = Image.new("RGB", (300, 300), (255, 0, 0))
+buf = io.BytesIO(); img.save(buf, format="PNG")
+data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+msg = {
+    "role": "user",
+    "content": [
+        {"type": "image_url", "image_url": {"url": data_url}},
+        {"type": "text", "text": "Что на картинке?"}
+    ],
+}
+print(backend.generate([msg]))
+
