@@ -212,9 +212,12 @@ class MainWindow(QMainWindow):
         self.sessions: List[ChatSession] = []
         self.current: Optional[ChatSession] = None
 
+        self.plugin_display_names: dict[str, str] = {}
+
         self._build_ui()
         self._load_chats()
         self._new_chat()  # initial session
+
 
     # ------------------------------------------------------------------#
     # UI layout
@@ -264,8 +267,11 @@ class MainWindow(QMainWindow):
             instance = get_plugin_manager().get(plugin.name)
             widget = getattr(instance, "get_widget", lambda: None)()
             if widget:
-                self.plugin_widgets[plugin.name] = widget  # ← сохраняем
-                right.addTab(widget, plugin.display_name)
+                self.plugin_widgets[plugin.name] = widget
+                self.plugin_display_names[plugin.name] = plugin.display_name  # обязательно сохраняем
+
+                if self.settings.plugins_enabled.get(plugin.name, True):  # показываем только включённые
+                    right.addTab(widget, plugin.display_name)
 
         splitter.addWidget(left)
         splitter.addWidget(center)
@@ -291,7 +297,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------#
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self)
-        dlg.exec()  # reload_settings() вызовется из accept()
+        if dlg.exec():
+            self.reload_settings()
+            self._update_plugin_tabs()  # применяем чекбоксы плагинов
 
     # ------------------------------------------------------------------#
     # Chat-session helpers
@@ -476,7 +484,18 @@ class MainWindow(QMainWindow):
         if widget is self.gallery_panel:
             self.gallery_panel.refresh()
 
-
+    def _update_plugin_tabs(self) -> None:
+        """Показать или скрыть вкладки плагинов согласно настройкам."""
+        enabled_plugins = self.settings.plugins_enabled
+        for name, widget in self.plugin_widgets.items():
+            index = self._tabs.indexOf(widget)
+            if enabled_plugins.get(name, True):
+                if index == -1:
+                    display_name = self.plugin_display_names.get(name, name)
+                    self._tabs.addTab(widget, display_name)
+            else:
+                if index != -1:
+                    self._tabs.removeTab(index)
 
     def reload_settings(self) -> None:
         """Перезагрузить настройки и пересоздать router."""

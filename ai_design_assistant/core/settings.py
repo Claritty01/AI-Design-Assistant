@@ -164,12 +164,18 @@ class Settings:
     #  Internals                                                        #
     # ------------------------------------------------------------------#
     def _ensure_plugins_dict(self) -> None:
-        """Если первый запуск — включаем все плагины, найденные в /plugins."""
-        if self.plugins_enabled:
-            return
+        """Обновляет список плагинов, добавляя новые и удаляя отсутствующие."""
         plugins_dir = Path(__file__).with_suffix("").parent.parent / "plugins"
-        self.plugins_enabled = {
-            p.stem: True
-            for p in plugins_dir.glob("*.py")
+        found_plugins = {
+            p.stem for p in plugins_dir.glob("*.py")
             if p.name not in {"__init__.py", ""}
         }
+
+        # Сохраняем включение для уже известных
+        updated: dict[str, bool] = {
+            name: self.plugins_enabled.get(name, True)
+            for name in found_plugins
+        }
+
+        self.plugins_enabled = updated
+
