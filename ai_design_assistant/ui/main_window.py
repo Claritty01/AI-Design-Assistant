@@ -58,6 +58,28 @@ class EnterTextEdit(QTextEdit):
 
     sendRequested = pyqtSignal()
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.input_bar = parent  # прямой доступ к InputBar
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.toLocalFile().lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if path.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                # ⬇ здесь нужно повторить логику как при нажатии на кнопку 📎
+                self.input_bar._attach_image_from_path(path)
+
+
+
     def keyPressEvent(self, ev: QKeyEvent) -> None:  # noqa: D401
         if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
             ev.modifiers() & Qt.KeyboardModifier.ShiftModifier
@@ -65,6 +87,14 @@ class EnterTextEdit(QTextEdit):
             self.sendRequested.emit()
             return  # suppress newline
         super().keyPressEvent(ev)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.toLocalFile().lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
 
 
 class InputBar(QWidget):
@@ -151,6 +181,15 @@ class InputBar(QWidget):
         self.preview_thumb.clear()
         self.preview_name.setText("")
 
+    def _attach_image_from_path(self, file_path: str) -> None:
+        self._clear_attachment()
+
+        self.attached_image = Path(file_path)
+        pixmap = QPixmap(file_path).scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                                           Qt.TransformationMode.SmoothTransformation)
+        self.preview_thumb.setPixmap(pixmap)
+        self.preview_name.setText(Path(file_path).name)
+        self.preview_widget.setVisible(True)
 
 
 # ╭──────────────────────────────────────────────╮
