@@ -13,6 +13,11 @@ Caller обязан вызвать `dlg.exec()` и, получив Accepted, у�
 """
 from __future__ import annotations
 
+from huggingface_hub import snapshot_download
+from PyQt6.QtWidgets import QMessageBox
+import os
+
+
 from pathlib import Path
 from typing import Final
 
@@ -55,6 +60,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Preferences")
         self.setMinimumWidth(420)
         self._settings = Settings.load()
+        self._download_button = None
 
         # ──────────────────────────────────────────────────────────────#
         #  Layout scaffolding                                           #
@@ -85,7 +91,12 @@ class SettingsDialog(QDialog):
         model_cb = QComboBox()
         model_cb.addItems(_PROVIDER_CHOICES)
         model_cb.setCurrentText(self._settings.model_provider)
+
+        model_cb.currentTextChanged.connect(self._update_download_button)
         g_form.addRow("Model provider:", model_cb)
+        self._model_cb = model_cb  # нужно для доступа внутри update
+        self._model_form = g_form  # нужно для динамического добавления кнопки
+        self._update_download_button(model_cb.currentText())
 
         theme_cb = QComboBox()
         theme_cb.addItems(_THEME_CHOICES)
@@ -101,6 +112,7 @@ class SettingsDialog(QDialog):
         index = list(_UNLOAD_CHOICES.keys()).index(current_mode)
         unload_cb.setCurrentIndex(index)
         g_form.addRow("Unload mode:", unload_cb)
+
 
         # === API-keys tab === #
         api_w = QWidget()
@@ -191,6 +203,39 @@ class SettingsDialog(QDialog):
     @property
     def settings(self) -> Settings:
         return self._settings
+
+    def _is_model_downloaded(self, model_id: str) -> bool:
+        hf_cache = Path.home() / ".cache" / "huggingface" / "hub"
+        return any(p.name.startswith(model_id.replace('/', '--')) for p in hf_cache.glob("models--*"))
+
+    def _download_model(self, model_id: str) -> None:
+        try:
+            snapshot_download(repo_id=model_id, local_dir=None)
+            QMessageBox.information(self, "Model downloaded", f"{model_id} successfully downloaded.")
+            self.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to download {model_id}:\n{e}")
+
+    def _update_download_button(self, provider: str) -> None:
+        model_id_map = {
+            "local": "neulab/Pangea-7B-hf",
+            "local_qwen25": "Qwen/Qwen2.5-VL-3B-Instruct"
+        }
+
+        # Удаляем старую кнопку, если есть
+        if self._download_button:
+            self._download_button.setParent(None)
+            self._download_button.deleteLater()
+            self._download_button = None
+
+        # Если выбрана локальная модель и она не скачана — создаём кнопку
+        if provider in model_id_map:
+            model_id = model_id_map[provider]
+            if not self._is_model_downloaded(model_id):
+                btn = QPushButton(f"📥 Download {model_id}")
+                btn.clicked.connect(lambda: self._download_model(model_id))
+                self._download_button = btn
+                self._model_form.addRow("Model download:", btn)
 
 
 # ──────────────────────────────────────────────────────────────────────#
