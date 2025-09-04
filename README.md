@@ -46,6 +46,8 @@ poetry run python -m ai_design_assistant
 ### 🐍 Или через pip + requirements.txt
 
 ```bash
+git clone https://github.com/Claritty01/AI-Design-Assistant.git "Укажите свой путь"
+python -m venv ./venv
 pip install -r requirements.txt
 python -m ai_design_assistant
 ```
@@ -146,6 +148,8 @@ poetry run python -m ai_design_assistant
 ### 🐍 Or using pip
 
 ```bash
+git clone https://github.com/Claritty01/AI-Design-Assistant.git "Enter your path"
+python -m venv ./venv
 pip install -r requirements.txt
 python -m ai_design_assistant
 ```
