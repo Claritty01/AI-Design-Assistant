@@ -77,9 +77,9 @@ sympy==1.14.0
 tb-nightly==2.20.0a20250510
 tensorboard-data-server==0.7.2
 tifffile==2025.3.30
-torch==2.5.1+cu121
-torchvision==0.20.1+cu121
-torchaudio==2.5.1+cu121
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
 tqdm==4.67.1
 typing-extensions==4.13.2
 typing-inspection==0.4.0
