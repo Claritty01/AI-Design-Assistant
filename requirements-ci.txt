@@ -1,5 +1,6 @@
 PyQt6==6.7.1
 pytest-qt==4.4.0
+nltk==3.9.1
 absl-py==2.2.2
 addict==2.4.0
 annotated-types==0.7.0
