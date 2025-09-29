@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from .chat import ChatSession, Message      # noqa: F401
 from .settings import Settings              # noqa: F401
-from .models import ModelBackend            # ← вернули для бекендов
+from .models import ModelBackend, LLMRouter  # noqa: F401
 
 __all__ = [
     "ChatSession",
@@ -17,10 +17,7 @@ __all__ = [
 # ──────────────────────────────────────────────
 #  ЛЕНИВАЯ фабрика глобального роутера LLM
 # ──────────────────────────────────────────────
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .models import LLMRouter
+from typing import Optional
 
 _GLOBAL_ROUTER: Optional["LLMRouter"] = None
 
