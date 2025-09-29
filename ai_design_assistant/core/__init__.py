@@ -14,14 +14,15 @@ __all__ = [
     "get_global_router",
 ]
 
-
 # ──────────────────────────────────────────────
 #  ЛЕНИВАЯ фабрика глобального роутера LLM
 # ──────────────────────────────────────────────
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import LLMRouter
 
 _GLOBAL_ROUTER: Optional["LLMRouter"] = None
-
 
 def get_global_router():              # noqa: D401
     """Singleton-роутер, создаётся при первом обращении."""
