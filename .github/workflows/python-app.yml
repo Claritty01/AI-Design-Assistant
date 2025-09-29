@@ -12,10 +12,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      # Рекомендуется актуальная версия setup-python
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -33,23 +33,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir flake8 pytest
 
-          # PyTorch CPU (фиксированные совместимые версии)
+          # Устанавливаем PyTorch CPU совместимых версий
           pip install --no-cache-dir \
             torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
             --index-url https://download.pytorch.org/whl/cpu
 
-          # Остальные зависимости (без torch*)
+          # Остальные зависимости (желательно убрать torch/vision/audio из requirements-ci.txt)
           if [ -f requirements-ci.txt ]; then
             pip install --no-cache-dir -r requirements-ci.txt
           fi
 
       - name: Show torch versions
-        run: python - << 'PY'
-from importlib.metadata import version
-print("torch:", version("torch"))
-print("torchvision:", version("torchvision"))
-print("torchaudio:", version("torchaudio"))
-PY
+        run: |
+          python -c "import importlib, importlib.util, sys; \
+mods=('torch','torchvision','torchaudio'); \
+def ok(n): \
+    return importlib.util.find_spec(n) is not None
+for n in mods:
+    try:
+        if ok(n):
+            m=__import__(n)
+            print(n, getattr(m,'__version__','<no __version__>'))
+        else:
+            print(n, 'N/A')
+    except Exception as e:
+        print(n, 'IMPORT-ERROR:', e)"
 
       - name: Lint with flake8
         run: |
