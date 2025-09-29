@@ -27,6 +27,13 @@ jobs:
           pip cache purge
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android 2>/dev/null || true
 
+      # -> добавлено: системные библиотеки для PyQt6
+      - name: Install system libs for Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libopengl0 libgl1
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -67,4 +74,3 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pytest -q
-
