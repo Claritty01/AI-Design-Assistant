@@ -12,7 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -32,32 +31,32 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --no-cache-dir flake8 pytest
-
-          # Устанавливаем PyTorch CPU совместимых версий
+          # PyTorch CPU совместимые версии
           pip install --no-cache-dir \
             torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
             --index-url https://download.pytorch.org/whl/cpu
-
-          # Остальные зависимости (желательно убрать torch/vision/audio из requirements-ci.txt)
+          # Остальные зависимости (без torch*)
           if [ -f requirements-ci.txt ]; then
             pip install --no-cache-dir -r requirements-ci.txt
           fi
 
       - name: Show torch versions
+        shell: bash
         run: |
-          python -c "import importlib, importlib.util, sys; \
-mods=('torch','torchvision','torchaudio'); \
-def ok(n): \
-    return importlib.util.find_spec(n) is not None
-for n in mods:
-    try:
-        if ok(n):
-            m=__import__(n)
-            print(n, getattr(m,'__version__','<no __version__>'))
-        else:
-            print(n, 'N/A')
-    except Exception as e:
-        print(n, 'IMPORT-ERROR:', e)"
+          python - <<'PY'
+          import importlib.util
+          mods = ('torch','torchvision','torchaudio')
+          for n in mods:
+              try:
+                  spec = importlib.util.find_spec(n)
+                  if spec is None:
+                      print(n, 'N/A')
+                      continue
+                  m = __import__(n)
+                  print(n, getattr(m, '__version__', '<no __version__>'))
+              except Exception as e:
+                  print(n, 'IMPORT-ERROR:', e)
+          PY
 
       - name: Lint with flake8
         run: |
