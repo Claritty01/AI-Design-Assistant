@@ -102,4 +102,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           HF_HUB_ENABLE_HF_TRANSFER: "0"
+          OPENAI_API_KEY: "dummy-ci-key"
+          DEEPSEEK_API_KEY: "dummy-ci-key"
+          TOGETHER_API_KEY: "dummy-ci-key"   # если такой бэкенд есть
         run: pytest -m "not slow" -q
+
