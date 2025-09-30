@@ -44,6 +44,9 @@ from ai_design_assistant.ui.workers import GenerateThread
 from ai_design_assistant.ui.gallery_panel import GalleryPanel
 from ai_design_assistant.core.settings import get_chats_directory
 
+import logging
+_LOGGER = logging.getLogger(__name__)
+
 
 ASSETS = Path(__file__).with_suffix("").parent.parent / "resources" / "icons"
 USER_ICON = ASSETS / "user.png"
@@ -206,8 +209,13 @@ class MainWindow(QMainWindow):
         self._threads: list[QThread] = []
 
         self.settings = Settings.load()
-        if self.settings.model_provider.startswith("local"):
-            import_module(f"ai_design_assistant.api.{self.settings.model_provider}_backend")
+        try:
+            if self.settings.model_provider.startswith("local"):
+                import_module(f"ai_design_assistant.api.{self.settings.model_provider}_backend")
+        except Exception as e:
+            # не критично для старта окна — просто залогируем
+            _LOGGER.warning("Начальный backend '%s' не загрузился: %s",
+                            self.settings.model_provider, e)
         self.router = LLMRouter(default=self.settings.model_provider)
         self.sessions: List[ChatSession] = []
         self.current: Optional[ChatSession] = None
@@ -498,31 +506,61 @@ class MainWindow(QMainWindow):
                     self._tabs.removeTab(index)
 
     def reload_settings(self) -> None:
-        """Перезагрузить настройки и пересоздать router."""
+        """Перезагрузить настройки и пересоздать router безопасно (с фолбэком на local)."""
         from importlib import import_module, reload
         from ai_design_assistant.core.models import LLMRouter, register_backend, _BACKENDS
 
         self.settings = Settings.load()
 
-        # 🧹 убираем старые бекенды
+        # Чистим список зарегистрированных бэкендов
         _BACKENDS.clear()
 
-        # ── загружаем (или перезагружаем) нужный модуль ──────────────────
-        name = self.settings.model_provider
-        module_path = f"ai_design_assistant.api.{name}_backend"
-        mod = import_module(module_path)
-        # если модуль уже импортирован → перезагрузим, чтобы сработал register_backend
-        if name in sys.modules:
-            mod = reload(mod)
+        desired = self.settings.model_provider
 
-        # на всякий случай регистрируем явно (вдруг модуль не вызвал register сам)
-        if getattr(mod, "backend", None) and mod.backend.name not in _BACKENDS:
-            register_backend(mod.backend)
+        def _try_load_and_register(name: str) -> bool:
+            """Пробует импортировать модуль бэкенда и зарегистрировать его. Возвращает успех."""
+            module_path = f"ai_design_assistant.api.{name}_backend"
+            try:
+                mod = import_module(module_path)
+                # Перезагрузим модуль, если уже был импортирован (чтобы сработал register заново)
+                if module_path in sys.modules:
+                    mod = reload(mod)
+                backend = getattr(mod, "backend", None)
+                if backend is not None:
+                    register_backend(backend)
+                    _LOGGER.info("Backend '%s' загружен и зарегистрирован", name)
+                    return True
+                _LOGGER.warning("Модуль %s загружен, но не содержит 'backend'", module_path)
+            except ImportError as e:
+                _LOGGER.warning("Backend '%s' пропущен (ImportError): %s", name, e)
+            except Exception as e:
+                _LOGGER.warning("Backend '%s' не загрузился: %s", name, e)
+            return False
 
-        # ♻️ пересоздаём роутер
-        self.router = LLMRouter(default=name)
+        # 1) Пытаемся загрузить желаемый провайдер из настроек
+        loaded_name = None
+        if _try_load_and_register(desired):
+            loaded_name = desired
+        else:
+            # 2) Фолбэки: сначала 'local', затем 'local_qwen25' (если есть в проекте)
+            for fallback in ("local", "local_qwen25"):
+                if _try_load_and_register(fallback):
+                    loaded_name = fallback
+                    _LOGGER.info("Провайдер '%s' недоступен — используем фолбэк '%s'", desired, fallback)
+                    break
 
-        # ── применяем тему сразу ──
+        if not loaded_name:
+            # Это совсем крайний случай: ни один бэкенд не поднялся.
+            # Чтобы не падать дальше, просто оставим старый router как есть (если был),
+            # и применим тему. В лог — ошибку.
+            _LOGGER.error("Не удалось загрузить ни один LLM backend. Оставляю прежний router.")
+            self._apply_theme(self.settings.theme)
+            return
+
+        # Пересоздаём роутер с рабочим дефолтом
+        self.router = LLMRouter(default=loaded_name)
+
+        # Применяем тему сразу
         self._apply_theme(self.settings.theme)
 
     def _apply_theme(self, theme: str) -> None:
