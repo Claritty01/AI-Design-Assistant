@@ -47,6 +47,11 @@ jobs:
             pip install --no-cache-dir -r requirements-ci.txt
           fi
 
+      - name: Download NLTK data
+        run: |
+          python -m nltk.downloader punkt stopwords
+
+      
       - name: Show torch versions
         shell: bash
         run: |
