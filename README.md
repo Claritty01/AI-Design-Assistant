@@ -98,6 +98,14 @@ pytest tests/
 
 Покрытие: unit-тесты логики, интеграционные тесты UI (через `pytest-qt`).
 
+
+## Диаграммы
+![desc](media/1.png)
+![desc](media/2.png)
+![desc](media/3.png)
+![desc](media/4.png)
+
+
 ---
 
 #   English (ENG):
@@ -201,3 +209,5 @@ pytest tests/
 ```
 
 Test suite includes both unit logic and GUI integration using `pytest-qt`.
+
+
